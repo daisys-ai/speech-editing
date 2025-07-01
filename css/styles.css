@@ -229,6 +229,7 @@ textarea:focus {
 /* Preview Section */
 .preview-section {
     margin-bottom: 20px;
+    display: none; /* Hidden by default until login */
 }
 
 .play-btn {

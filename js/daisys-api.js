@@ -24,7 +24,10 @@ class DaisysAPI {
 
     // Check if user is logged in
     isLoggedIn() {
-        return !!this.accessToken;
+        console.log('Checking login status, accessToken:', this.accessToken);
+        const isValid = this.accessToken && this.accessToken !== 'undefined' && this.accessToken !== 'null';
+        console.log('isLoggedIn result:', isValid);
+        return isValid;
     }
 
     // Login to Daisys
@@ -60,17 +63,27 @@ class DaisysAPI {
             }
 
             const data = await response.json();
-            console.log('Login successful, received tokens');
+            console.log('Login successful, received data:', data);
             
-            // Store tokens - ensure they exist before storing
-            if (data.access) {
-                this.accessToken = data.access;
-                localStorage.setItem('daisys_access_token', data.access);
+            // Store tokens - check different possible response formats
+            const accessToken = data.access || data.access_token || data.accessToken;
+            const refreshToken = data.refresh || data.refresh_token || data.refreshToken;
+            
+            console.log('Extracted tokens - access:', accessToken, 'refresh:', refreshToken);
+            
+            if (accessToken) {
+                this.accessToken = accessToken;
+                localStorage.setItem('daisys_access_token', accessToken);
+                console.log('Stored access token:', this.accessToken);
+            } else {
+                console.error('No access token found in response!');
             }
-            if (data.refresh) {
-                this.refreshToken = data.refresh;
-                localStorage.setItem('daisys_refresh_token', data.refresh);
+            
+            if (refreshToken) {
+                this.refreshToken = refreshToken;
+                localStorage.setItem('daisys_refresh_token', refreshToken);
             }
+            
             this.username = email;
             localStorage.setItem('daisys_username', email);
             

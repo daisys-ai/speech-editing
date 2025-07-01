@@ -72,3 +72,6 @@ differentiate between the URL for the daisys API, which I do want to override,
 and the URL for authentication.  Please support both DAISYS_API_URL and
 DAISYS_AUTH_URL as environment variables.  Use an env file with commented out
 lines for each configuration.
+
+Login appears to work, according to console messages, but after login I do not
+see the preview button and now it is gone even if I refresh.

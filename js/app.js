@@ -804,6 +804,14 @@ function addAuthEventListeners() {
             
             updateAuthUI();
             updateUIState();
+            
+            // Force another update after a short delay to handle any timing issues
+            setTimeout(() => {
+                console.log('Delayed UI update after login');
+                daisysAPI.loadTokens();
+                updateAuthUI();
+                updateUIState();
+            }, 100);
         } else {
             // Show more detailed error message
             const errorMsg = result.error || 'Login failed. Please check your credentials.';
@@ -825,6 +833,9 @@ function addAuthEventListeners() {
 // Update authentication UI
 function updateAuthUI() {
     console.log('Updating auth UI, logged in:', daisysAPI.isLoggedIn());
+    console.log('Access token:', daisysAPI.accessToken);
+    console.log('Username:', daisysAPI.username);
+    
     if (daisysAPI.isLoggedIn()) {
         loginBtn.style.display = 'none';
         userInfo.style.display = 'flex';
@@ -849,15 +860,27 @@ function updateUIState() {
     // Show/hide preview button based on login status
     const previewSection = document.querySelector('.preview-section');
     if (previewSection) {
+        console.log('Preview section found, setting display to:', isLoggedIn ? 'block' : 'none');
         previewSection.style.display = isLoggedIn ? 'block' : 'none';
+    } else {
+        console.error('Preview section not found!');
     }
-    playBtn.style.display = isLoggedIn ? 'flex' : 'none';
+    
+    if (playBtn) {
+        console.log('Play button found, setting display to:', isLoggedIn ? 'flex' : 'none');
+        playBtn.style.display = isLoggedIn ? 'flex' : 'none';
+    } else {
+        console.error('Play button not found!');
+    }
     
     // Show/hide word display based on preview status
     wordDisplay.style.display = hasGeneratedPreview ? 'flex' : 'none';
     
     // Show/hide editor based on preview status
-    document.querySelector('.word-editor').style.display = hasGeneratedPreview ? 'block' : 'none';
+    const wordEditor = document.querySelector('.word-editor');
+    if (wordEditor) {
+        wordEditor.style.display = hasGeneratedPreview ? 'block' : 'none';
+    }
     
     // Enable/disable text input based on preview status
     textInput.disabled = hasGeneratedPreview;
@@ -871,15 +894,17 @@ function updateUIState() {
     
     // Update instruction text
     const instruction = document.querySelector('.instruction');
-    if (!isLoggedIn) {
-        instruction.innerHTML = '<p>Please login to use the timing editor</p>';
-    } else if (!hasGeneratedPreview) {
-        instruction.innerHTML = '<p>Click "Preview timing" to generate speech and start editing</p>';
-    } else {
-        instruction.innerHTML = `
-            <p><span class="highlight">Drag the blue handles</span> on word edges to adjust duration or use the slider for precise control</p>
-            <p class="subinstruction">Click on any word to select it and adjust its timing</p>
-        `;
+    if (instruction) {
+        if (!isLoggedIn) {
+            instruction.innerHTML = '<p>Please login to use the timing editor</p>';
+        } else if (!hasGeneratedPreview) {
+            instruction.innerHTML = '<p>Click "Preview timing" to generate speech and start editing</p>';
+        } else {
+            instruction.innerHTML = `
+                <p><span class="highlight">Drag the blue handles</span> on word edges to adjust duration or use the slider for precise control</p>
+                <p class="subinstruction">Click on any word to select it and adjust its timing</p>
+            `;
+        }
     }
 }
 
@@ -1212,4 +1237,26 @@ function init() {
 }
 
 // Initialize the app when the DOM is loaded
-document.addEventListener('DOMContentLoaded', init); 
+document.addEventListener('DOMContentLoaded', init);
+
+// Debug function to manually update UI (can be called from console)
+window.debugUpdateUI = function() {
+    console.log('=== DEBUG UI UPDATE ===');
+    console.log('DaisysAPI instance:', daisysAPI);
+    console.log('Access token:', daisysAPI.accessToken);
+    console.log('Is logged in:', daisysAPI.isLoggedIn());
+    console.log('Preview section:', document.querySelector('.preview-section'));
+    console.log('Play button:', playBtn);
+    
+    // Check localStorage directly
+    console.log('=== LOCALSTORAGE CHECK ===');
+    console.log('Stored access token:', localStorage.getItem('daisys_access_token'));
+    console.log('Stored refresh token:', localStorage.getItem('daisys_refresh_token'));
+    console.log('Stored username:', localStorage.getItem('daisys_username'));
+    console.log('All localStorage keys:', Object.keys(localStorage));
+    
+    updateAuthUI();
+    updateUIState();
+    
+    console.log('=== END DEBUG ===');
+}; 

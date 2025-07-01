@@ -84,3 +84,7 @@ input to get /takes/generate.
 Almost there but you are missing the voice_id field.  Please adjust the code to
 determine or generate the voice immediately after login, so that everything is
 ready to just create a take on demand.
+
+Almost working, but fetching the audio is incorrect. Please process response
+from /takes/generate, poll for 'ready' status, and then request the audio using
+the /wav URL, as indicated in the Daisys documentation.

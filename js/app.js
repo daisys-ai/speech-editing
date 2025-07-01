@@ -976,7 +976,7 @@ async function handlePlayClick() {
     playBtn.disabled = true;
     playBtn.innerHTML = `
         <div class="spinner"></div>
-        <span>Generating...</span>
+        <span>Generating speech...</span>
     `;
     
     try {
@@ -994,15 +994,40 @@ async function handlePlayClick() {
         // Generate TTS with the stored voice ID
         const result = await daisysAPI.generateTTS(textInput.value, daisysAPI.voiceId, durations);
         
-        // Create audio element
+        // Create audio element with authentication
         if (currentAudio) {
             currentAudio.pause();
         }
         
-        currentAudio = new Audio(result.audioUrl);
-        
-        // Play the audio
-        await currentAudio.play();
+        // For authenticated endpoints, we need to fetch the audio with auth header
+        try {
+            console.log('Fetching audio from:', result.audioUrl);
+            const audioResponse = await fetch(result.audioUrl, {
+                headers: {
+                    'Authorization': `Bearer ${daisysAPI.accessToken}`
+                }
+            });
+            
+            if (!audioResponse.ok) {
+                throw new Error(`Failed to fetch audio: ${audioResponse.status}`);
+            }
+            
+            const audioBlob = await audioResponse.blob();
+            const audioObjectUrl = URL.createObjectURL(audioBlob);
+            
+            currentAudio = new Audio(audioObjectUrl);
+            
+            // Play the audio
+            await currentAudio.play();
+            
+            // Clean up the object URL when done
+            currentAudio.addEventListener('ended', () => {
+                URL.revokeObjectURL(audioObjectUrl);
+            });
+        } catch (audioError) {
+            console.error('Failed to fetch/play audio:', audioError);
+            throw audioError;
+        }
         
         // Update UI state
         if (!hasGeneratedPreview) {

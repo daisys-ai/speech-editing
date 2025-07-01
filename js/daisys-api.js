@@ -261,14 +261,22 @@ class DaisysAPI {
             const data = await response.json();
             console.log('TTS response:', data);
             
-            // The API might return different formats, so check for various possibilities
-            const audioUrl = data.audio_url || data.audioUrl || data.url;
+            // Extract take ID from response
             const takeId = data.take_id || data.takeId || data.id;
             
-            if (!audioUrl) {
-                console.error('No audio URL in response:', data);
-                throw new Error('No audio URL returned from TTS API');
+            if (!takeId) {
+                console.error('No take ID in response:', data);
+                throw new Error('No take ID returned from TTS API');
             }
+            
+            console.log('Take created with ID:', takeId);
+            
+            // Poll for take status
+            await this.waitForTakeReady(takeId);
+            
+            // Construct audio URL
+            const audioUrl = `${this.apiUrl}/v1/speak/takes/${takeId}/wav`;
+            console.log('Audio URL:', audioUrl);
             
             return {
                 takeId: takeId,
@@ -288,6 +296,46 @@ class DaisysAPI {
         // In a real implementation, we would use SSML-like tags
         // to control the duration of individual phonemes
         return text;
+    }
+    
+    // Wait for take to be ready
+    async waitForTakeReady(takeId, maxAttempts = 30) {
+        console.log('Polling for take status:', takeId);
+        
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            try {
+                const response = await fetch(`${this.apiUrl}/v1/speak/takes/${takeId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${this.accessToken}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to get take status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log(`Take status (attempt ${attempt + 1}):`, data.status);
+                
+                if (data.status === 'ready') {
+                    console.log('Take is ready!');
+                    return data;
+                }
+                
+                if (data.status === 'failed' || data.status === 'error') {
+                    throw new Error(`Take generation failed with status: ${data.status}`);
+                }
+                
+                // Wait before next poll (start with 200ms, increase gradually)
+                const delay = Math.min(200 + (attempt * 100), 1000);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            } catch (error) {
+                console.error('Error polling take status:', error);
+                throw error;
+            }
+        }
+        
+        throw new Error('Take generation timed out');
     }
 
     // Refresh access token

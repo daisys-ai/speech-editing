@@ -155,7 +155,7 @@ class DaisysAPI {
                 },
                 body: JSON.stringify({
                     name: 'Default Infilling Voice',
-                    gender: 'neutral',
+                    gender: 'male',
                     model: 'infilling-en'
                 })
             });

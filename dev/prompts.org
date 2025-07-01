@@ -75,3 +75,12 @@ lines for each configuration.
 
 Login appears to work, according to console messages, but after login I do not
 see the preview button and now it is gone even if I refresh.
+
+Progress, login works and preview almost works. I made some edits so that it
+successfully generates a voice. Now it's failing to generate a take, but that's
+because the JSON is incorrect. Please refer to the Daisys documentation on what
+input to get /takes/generate.
+
+Almost there but you are missing the voice_id field.  Please adjust the code to
+determine or generate the voice immediately after login, so that everything is
+ready to just create a take on demand.

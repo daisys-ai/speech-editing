@@ -244,12 +244,25 @@ textarea:focus {
     transition: background-color 0.2s;
 }
 
-.play-btn:hover {
+.play-btn:hover:not(:disabled) {
     background-color: #e8eaed;
+}
+
+.play-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.play-btn:disabled:hover {
+    background-color: #f1f3f4;
 }
 
 .play-btn svg {
     fill: #4285f4;
+}
+
+.play-btn:disabled svg {
+    fill: #9aa0a6;
 }
 
 /* Word Display */

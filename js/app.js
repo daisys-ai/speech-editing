@@ -762,6 +762,36 @@ function switchMode(mode) {
     }
 }
 
+// Create voice with UI feedback
+async function createVoiceWithUI() {
+    try {
+        // Update UI to show voice creation is in progress
+        updateUIState();
+        
+        console.log('Creating voice...');
+        const voiceId = await daisysAPI.getOrCreateVoice();
+        
+        // Store the voice ID if valid
+        if (voiceId && voiceId !== 'undefined') {
+            daisysAPI.voiceId = voiceId;
+            localStorage.setItem('daisys_voice_id', voiceId);
+            console.log('Voice created/retrieved:', voiceId);
+        } else {
+            console.error('Invalid voice ID returned:', voiceId);
+            throw new Error('Invalid voice ID returned from API');
+        }
+        
+        // Update UI to show voice is ready
+        updateUIState();
+    } catch (error) {
+        console.error('Failed to create voice:', error);
+        alert('Failed to create voice. You may need to try logging in again.');
+        
+        // Update UI to show error state
+        updateUIState();
+    }
+}
+
 // Add authentication event listeners
 function addAuthEventListeners() {
     // Login button click
@@ -805,13 +835,13 @@ function addAuthEventListeners() {
             updateAuthUI();
             updateUIState();
             
-            // Force another update after a short delay to handle any timing issues
-            setTimeout(() => {
-                console.log('Delayed UI update after login');
-                daisysAPI.loadTokens();
-                updateAuthUI();
-                updateUIState();
-            }, 100);
+            // Create voice if needed
+            if (result.needsVoice && !daisysAPI.voiceId) {
+                console.log('Need to create voice...');
+                createVoiceWithUI();
+            } else {
+                console.log('Voice already exists:', daisysAPI.voiceId);
+            }
         } else {
             // Show more detailed error message
             const errorMsg = result.error || 'Login failed. Please check your credentials.';
@@ -855,7 +885,9 @@ let currentSessionId = Date.now().toString();
 // Update UI state based on login and preview status
 function updateUIState() {
     const isLoggedIn = daisysAPI.isLoggedIn();
-    console.log('Updating UI state, logged in:', isLoggedIn, 'has preview:', hasGeneratedPreview);
+    const isCreatingVoice = daisysAPI.isCreatingVoice;
+    const hasVoice = !!daisysAPI.voiceId;
+    console.log('Updating UI state, logged in:', isLoggedIn, 'has voice:', hasVoice, 'creating voice:', isCreatingVoice, 'has preview:', hasGeneratedPreview);
     
     // Show/hide preview button based on login status
     const previewSection = document.querySelector('.preview-section');
@@ -869,6 +901,31 @@ function updateUIState() {
     if (playBtn) {
         console.log('Play button found, setting display to:', isLoggedIn ? 'flex' : 'none');
         playBtn.style.display = isLoggedIn ? 'flex' : 'none';
+        
+        // Disable button if voice is being created or not ready
+        playBtn.disabled = isCreatingVoice || !hasVoice;
+        
+        // Update button text based on state
+        if (isCreatingVoice) {
+            playBtn.innerHTML = `
+                <div class="spinner"></div>
+                <span>Creating voice...</span>
+            `;
+        } else if (!hasVoice) {
+            playBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                    <path d="M8 5v14l11-7z"></path>
+                </svg>
+                <span>Voice not ready</span>
+            `;
+        } else {
+            playBtn.innerHTML = `
+                <svg viewBox="0 0 24 24" width="24" height="24">
+                    <path d="M8 5v14l11-7z"></path>
+                </svg>
+                <span>Preview timing</span>
+            `;
+        }
     } else {
         console.error('Play button not found!');
     }
@@ -897,6 +954,10 @@ function updateUIState() {
     if (instruction) {
         if (!isLoggedIn) {
             instruction.innerHTML = '<p>Please login to use the timing editor</p>';
+        } else if (isCreatingVoice) {
+            instruction.innerHTML = '<p>Creating voice... This may take a few seconds</p>';
+        } else if (!hasVoice) {
+            instruction.innerHTML = '<p>Voice setup required. Please wait...</p>';
         } else if (!hasGeneratedPreview) {
             instruction.innerHTML = '<p>Click "Preview timing" to generate speech and start editing</p>';
         } else {
@@ -919,14 +980,19 @@ async function handlePlayClick() {
     `;
     
     try {
-        // Get or create voice
-        const voiceId = await daisysAPI.getOrCreateVoice();
+        // Check if we have a voice ID
+        if (!daisysAPI.voiceId) {
+            console.log('No voice ID found, creating one...');
+            const voiceId = await daisysAPI.getOrCreateVoice();
+            daisysAPI.voiceId = voiceId;
+            localStorage.setItem('daisys_voice_id', voiceId);
+        }
         
         // Get phoneme durations
         const durations = getAllPhonemeDurations();
         
-        // Generate TTS
-        const result = await daisysAPI.generateTTS(textInput.value, voiceId, durations);
+        // Generate TTS with the stored voice ID
+        const result = await daisysAPI.generateTTS(textInput.value, daisysAPI.voiceId, durations);
         
         // Create audio element
         if (currentAudio) {
@@ -1183,19 +1249,19 @@ style.textContent = `
     .spinner {
         width: 20px;
         height: 20px;
-        border: 2px solid #ffffff;
+        border: 2px solid #5f6368;
         border-top-color: transparent;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
     }
     
-    @keyframes spin {
-        to { transform: rotate(360deg); }
+    .play-btn:disabled .spinner {
+        border-color: #9aa0a6;
+        border-top-color: transparent;
     }
     
-    .play-btn:disabled {
-        opacity: 0.7;
-        cursor: not-allowed;
+    @keyframes spin {
+        to { transform: rotate(360deg); }
     }
 `;
 document.head.appendChild(style);
@@ -1234,6 +1300,12 @@ function init() {
     // Replace the old play button handler
     playBtn.removeEventListener('click', playBtn.onclick);
     playBtn.addEventListener('click', handlePlayClick);
+    
+    // Check if we're logged in but don't have a voice
+    if (daisysAPI.isLoggedIn() && !daisysAPI.voiceId) {
+        console.log('Logged in but no voice, creating one...');
+        createVoiceWithUI();
+    }
 }
 
 // Initialize the app when the DOM is loaded

@@ -8,6 +8,12 @@ class DaisysAPI {
         this.apiUrl = window.config.DAISYS_API_URL;
         this.authUrl = window.config.DAISYS_AUTH_URL;
         this.mockMode = window.config.MOCK_MODE;
+        
+        // Store voice ID
+        this.voiceId = localStorage.getItem('daisys_voice_id');
+        
+        // Voice creation state
+        this.isCreatingVoice = false;
     }
     
     // Load tokens from localStorage
@@ -15,11 +21,13 @@ class DaisysAPI {
         const accessToken = localStorage.getItem('daisys_access_token');
         const refreshToken = localStorage.getItem('daisys_refresh_token');
         const username = localStorage.getItem('daisys_username');
+        const voiceId = localStorage.getItem('daisys_voice_id');
         
         // Ensure we don't store "undefined" as a string
         this.accessToken = (accessToken && accessToken !== 'undefined') ? accessToken : null;
         this.refreshToken = (refreshToken && refreshToken !== 'undefined') ? refreshToken : null;
         this.username = (username && username !== 'undefined') ? username : null;
+        this.voiceId = (voiceId && voiceId !== 'undefined') ? voiceId : null;
     }
 
     // Check if user is logged in
@@ -87,7 +95,9 @@ class DaisysAPI {
             this.username = email;
             localStorage.setItem('daisys_username', email);
             
-            return { success: true, username: email };
+            // Don't create voice here - we'll do it after login completes
+            // so we can show proper UI feedback
+            return { success: true, username: email, needsVoice: !this.voiceId };
         } catch (error) {
             console.error('Login error:', error);
             return { success: false, error: error.message };
@@ -99,10 +109,12 @@ class DaisysAPI {
         this.accessToken = null;
         this.refreshToken = null;
         this.username = null;
+        this.voiceId = null;
         
         localStorage.removeItem('daisys_access_token');
         localStorage.removeItem('daisys_refresh_token');
         localStorage.removeItem('daisys_username');
+        localStorage.removeItem('daisys_voice_id');
     }
     
     // Clear invalid tokens
@@ -120,9 +132,14 @@ class DaisysAPI {
     // Get or create a voice for infilling-en model
     async getOrCreateVoice() {
         try {
+            this.isCreatingVoice = true;
+            
             // If using mock mode, return mock voice ID
             if (this.mockMode) {
                 console.log('Mock mode: Using mock voice ID');
+                // Simulate a delay for mock mode
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                this.isCreatingVoice = false;
                 return 'mock_voice_id';
             }
             
@@ -137,13 +154,22 @@ class DaisysAPI {
                 throw new Error('Failed to fetch voices');
             }
 
-            const voices = await voicesResponse.json();
+            const voicesData = await voicesResponse.json();
+            console.log('Voices response:', voicesData);
+            
+            // The response might be an array or have a voices property
+            const voices = Array.isArray(voicesData) ? voicesData : (voicesData.voices || voicesData.data || []);
+            console.log('Extracted voices array:', voices);
             
             // Look for an infilling-en voice
             const infillingVoice = voices.find(v => v.model === 'infilling-en');
+            console.log('Found infilling voice:', infillingVoice);
             
             if (infillingVoice) {
-                return infillingVoice.id;
+                this.isCreatingVoice = false;
+                const voiceId = infillingVoice.id || infillingVoice.voice_id;
+                console.log('Returning existing voice ID:', voiceId);
+                return voiceId;
             }
 
             // Create a new voice for infilling-en
@@ -165,9 +191,14 @@ class DaisysAPI {
             }
 
             const newVoice = await createResponse.json();
-            return newVoice.id;
+            console.log('Created new voice:', newVoice);
+            this.isCreatingVoice = false;
+            const voiceId = newVoice.id || newVoice.voice_id;
+            console.log('Returning new voice ID:', voiceId);
+            return voiceId;
         } catch (error) {
             console.error('Voice error:', error);
+            this.isCreatingVoice = false;
             throw error;
         }
     }
@@ -187,14 +218,30 @@ class DaisysAPI {
             }
             
             console.log('Generating TTS with token:', this.accessToken);
+            console.log('Using voice ID:', voiceId);
             
             // Ensure we have a valid token
             if (!this.accessToken || this.accessToken === 'undefined') {
                 throw new Error('No valid access token available');
             }
             
+            // Ensure we have a voice ID
+            if (!voiceId) {
+                throw new Error('No voice ID provided for TTS generation');
+            }
+            
             // Format the text with prosody controls based on durations
             const formattedText = this.formatTextWithProsody(text, phonemeDurations);
+            
+            const requestBody = {
+                voice_id: voiceId,
+                text: formattedText
+            };
+            
+            // Optionally add prosody based on durations (future enhancement)
+            // For now, we'll use default prosody
+            
+            console.log('TTS request body:', JSON.stringify(requestBody, null, 2));
             
             const response = await fetch(`${this.apiUrl}/v1/speak/takes/generate`, {
                 method: 'POST',
@@ -202,25 +249,32 @@ class DaisysAPI {
                     'Authorization': `Bearer ${this.accessToken}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    voice_id: voiceId,
-                    text: formattedText,
-                    format: 'mp3'
-                })
+                body: JSON.stringify(requestBody)
             });
 
             if (!response.ok) {
-                throw new Error('TTS generation failed');
+                const errorText = await response.text();
+                console.error('TTS generation failed:', errorText);
+                throw new Error(`TTS generation failed: ${response.status}`);
             }
 
             const data = await response.json();
+            console.log('TTS response:', data);
             
-            // The API returns a take_id and audio_url
+            // The API might return different formats, so check for various possibilities
+            const audioUrl = data.audio_url || data.audioUrl || data.url;
+            const takeId = data.take_id || data.takeId || data.id;
+            
+            if (!audioUrl) {
+                console.error('No audio URL in response:', data);
+                throw new Error('No audio URL returned from TTS API');
+            }
+            
             return {
-                takeId: data.take_id,
-                audioUrl: data.audio_url,
-                duration: data.duration,
-                normalizedText: data.normalized_text
+                takeId: takeId,
+                audioUrl: audioUrl,
+                duration: data.duration || data.audio_duration || 0,
+                normalizedText: data.normalized_text || data.normalizedText || text
             };
         } catch (error) {
             console.error('TTS error:', error);

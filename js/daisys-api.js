@@ -1,8 +1,17 @@
 // Daisys API Integration
-const DAISYS_API_BASE = 'https://api.daisys.ai';
-
 class DaisysAPI {
     constructor() {
+        // Load tokens from localStorage on initialization
+        this.loadTokens();
+        
+        // Use config for URLs
+        this.apiUrl = window.config.DAISYS_API_URL;
+        this.authUrl = window.config.DAISYS_AUTH_URL;
+        this.mockMode = window.config.MOCK_MODE;
+    }
+    
+    // Load tokens from localStorage
+    loadTokens() {
         this.accessToken = localStorage.getItem('daisys_access_token');
         this.refreshToken = localStorage.getItem('daisys_refresh_token');
         this.username = localStorage.getItem('daisys_username');
@@ -16,7 +25,20 @@ class DaisysAPI {
     // Login to Daisys
     async login(email, password) {
         try {
-            const response = await fetch(`${DAISYS_API_BASE}/auth/login`, {
+            // Check if mock mode is enabled
+            if (this.mockMode) {
+                console.log('Mock mode enabled, using mock authentication');
+                this.accessToken = window.config.MOCK_TOKEN;
+                this.username = email;
+                localStorage.setItem('daisys_access_token', window.config.MOCK_TOKEN);
+                localStorage.setItem('daisys_username', email);
+                return { success: true, username: email };
+            }
+            
+            console.log('Attempting login with email:', email);
+            console.log('Using auth URL:', this.authUrl);
+            
+            const response = await fetch(`${this.authUrl}/auth/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -24,11 +46,16 @@ class DaisysAPI {
                 body: JSON.stringify({ email, password })
             });
 
+            console.log('Login response status:', response.status);
+
             if (!response.ok) {
-                throw new Error('Login failed');
+                const errorText = await response.text();
+                console.error('Login failed with response:', errorText);
+                throw new Error(`Login failed: ${response.status}`);
             }
 
             const data = await response.json();
+            console.log('Login successful, received tokens');
             
             // Store tokens
             this.accessToken = data.access;
@@ -60,8 +87,14 @@ class DaisysAPI {
     // Get or create a voice for infilling-en model
     async getOrCreateVoice() {
         try {
+            // If using mock mode, return mock voice ID
+            if (this.mockMode) {
+                console.log('Mock mode: Using mock voice ID');
+                return 'mock_voice_id';
+            }
+            
             // First, try to get existing voices
-            const voicesResponse = await fetch(`${DAISYS_API_BASE}/v1/speak/voices`, {
+            const voicesResponse = await fetch(`${this.apiUrl}/v1/speak/voices`, {
                 headers: {
                     'Authorization': `Bearer ${this.accessToken}`
                 }
@@ -81,7 +114,7 @@ class DaisysAPI {
             }
 
             // Create a new voice for infilling-en
-            const createResponse = await fetch(`${DAISYS_API_BASE}/v1/speak/voices/generate`, {
+            const createResponse = await fetch(`${this.apiUrl}/v1/speak/voices/generate`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${this.accessToken}`,
@@ -109,10 +142,21 @@ class DaisysAPI {
     // Generate TTS with timing information
     async generateTTS(text, voiceId, phonemeDurations) {
         try {
+            // If using mock mode, return mock data
+            if (this.mockMode) {
+                console.log('Mock mode: Using mock TTS generation');
+                return {
+                    takeId: 'mock_take_' + Date.now(),
+                    audioUrl: 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=', // Silent audio
+                    duration: 2.5,
+                    normalizedText: text
+                };
+            }
+            
             // Format the text with prosody controls based on durations
             const formattedText = this.formatTextWithProsody(text, phonemeDurations);
             
-            const response = await fetch(`${DAISYS_API_BASE}/v1/speak/takes/generate`, {
+            const response = await fetch(`${this.apiUrl}/v1/speak/takes/generate`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${this.accessToken}`,
@@ -155,7 +199,7 @@ class DaisysAPI {
     // Refresh access token
     async refreshAccessToken() {
         try {
-            const response = await fetch(`${DAISYS_API_BASE}/auth/refresh`, {
+            const response = await fetch(`${this.authUrl}/auth/refresh`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

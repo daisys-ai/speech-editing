@@ -798,10 +798,16 @@ function addAuthEventListeners() {
         if (result.success) {
             loginModal.classList.remove('active');
             loginForm.reset();
+            
+            // Reload tokens to ensure they're properly set
+            daisysAPI.loadTokens();
+            
             updateAuthUI();
             updateUIState();
         } else {
-            alert('Login failed. Please check your credentials.');
+            // Show more detailed error message
+            const errorMsg = result.error || 'Login failed. Please check your credentials.';
+            alert(`Login failed: ${errorMsg}\n\nTip: You can enable mock mode by adding ?mock=true to the URL or setting MOCK_MODE=true in your .env file.`);
         }
         
         // Re-enable form
@@ -818,6 +824,7 @@ function addAuthEventListeners() {
 
 // Update authentication UI
 function updateAuthUI() {
+    console.log('Updating auth UI, logged in:', daisysAPI.isLoggedIn());
     if (daisysAPI.isLoggedIn()) {
         loginBtn.style.display = 'none';
         userInfo.style.display = 'flex';
@@ -837,8 +844,13 @@ let currentSessionId = Date.now().toString();
 // Update UI state based on login and preview status
 function updateUIState() {
     const isLoggedIn = daisysAPI.isLoggedIn();
+    console.log('Updating UI state, logged in:', isLoggedIn, 'has preview:', hasGeneratedPreview);
     
     // Show/hide preview button based on login status
+    const previewSection = document.querySelector('.preview-section');
+    if (previewSection) {
+        previewSection.style.display = isLoggedIn ? 'block' : 'none';
+    }
     playBtn.style.display = isLoggedIn ? 'flex' : 'none';
     
     // Show/hide word display based on preview status

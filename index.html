@@ -10,11 +10,45 @@
     <div class="container">
         <header>
             <h1>Word Duration</h1>
-            <div class="mode-toggle">
-                <button class="mode-btn active" id="simple-mode">Simple</button>
-                <button class="mode-btn" id="advanced-mode">Advanced</button>
+            <div class="header-controls">
+                <div class="auth-container" id="auth-container">
+                    <button class="login-btn" id="login-btn">Login</button>
+                    <div class="user-info" id="user-info" style="display: none;">
+                        <span id="username-display"></span>
+                        <button class="logout-btn" id="logout-btn">
+                            <svg viewBox="0 0 24 24" width="20" height="20">
+                                <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="mode-toggle">
+                    <button class="mode-btn active" id="simple-mode">Simple</button>
+                    <button class="mode-btn" id="advanced-mode">Advanced</button>
+                </div>
             </div>
         </header>
+        
+        <!-- Login Modal -->
+        <div class="modal" id="login-modal">
+            <div class="modal-content">
+                <h2>Login to Daisys</h2>
+                <form id="login-form">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="cancel-btn" id="cancel-login">Cancel</button>
+                        <button type="submit" class="submit-btn">Login</button>
+                    </div>
+                </form>
+            </div>
+        </div>
 
         <div class="input-container">
             <textarea id="text-input" placeholder="Enter text here...">The quick brown fox jumps over the lazy dog</textarea>
@@ -62,8 +96,24 @@
             <p><span class="highlight">Drag the blue handles</span> on word edges to adjust duration or use the slider for precise control</p>
             <p class="subinstruction">Click on any word to select it and adjust its timing</p>
         </div>
+        
+        <!-- History Widget -->
+        <div class="history-widget" id="history-widget">
+            <div class="history-header">
+                <h3>History</h3>
+                <button class="toggle-history" id="toggle-history">
+                    <svg viewBox="0 0 24 24" width="16" height="16">
+                        <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"></path>
+                    </svg>
+                </button>
+            </div>
+            <div class="history-content" id="history-content">
+                <div class="history-empty">No preview history yet</div>
+            </div>
+        </div>
     </div>
 
+    <script src="js/daisys-api.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html> 

@@ -8,6 +8,17 @@ const speedSlider = document.getElementById('speed-slider');
 const playBtn = document.getElementById('play-btn');
 const simpleMode = document.getElementById('simple-mode');
 const advancedMode = document.getElementById('advanced-mode');
+const loginBtn = document.getElementById('login-btn');
+const loginModal = document.getElementById('login-modal');
+const loginForm = document.getElementById('login-form');
+const cancelLoginBtn = document.getElementById('cancel-login');
+const authContainer = document.getElementById('auth-container');
+const userInfo = document.getElementById('user-info');
+const usernameDisplay = document.getElementById('username-display');
+const logoutBtn = document.getElementById('logout-btn');
+
+// Initialize Daisys API
+const daisysAPI = new DaisysAPI();
 
 // Mock data for phonemes (in a real app, this would come from an API)
 const phonemeData = {
@@ -28,6 +39,10 @@ const consonants = ['b', 'p', 'd', 't', 'g', 'k', 'f', 'v', 'θ', 'ð', 's', 'z'
 
 // Function to generate mock phoneme data for words
 function generatePhonemeData(word) {
+    if (word === '<break/>') {
+        return [];
+    }
+    
     if (phonemeData[word]) {
         return phonemeData[word];
     }
@@ -118,6 +133,48 @@ let dragTarget = null;
 let dragStartX = 0;
 let originalWidth = 0;
 
+// Callback for duration changes
+let onDurationChangeCallback = null;
+
+// Set the duration change callback
+function setDurationChangeCallback(callback) {
+    onDurationChangeCallback = callback;
+}
+
+// Helper function to get all phoneme durations
+function getAllPhonemeDurations() {
+    const result = [];
+    const words = textInput.value.split(' ').filter(word => word.trim() !== '');
+    
+    words.forEach(word => {
+        if (word === '<break/>') {
+            // Handle silence blocks
+            const duration = wordDurations[word] || 1.0;
+            result.push(['<silence>', Math.round(duration * 100)]);
+        } else {
+            const phonemes = generatePhonemeData(word);
+            phonemes.forEach(phoneme => {
+                const duration = (phonemeDurations[word] && phonemeDurations[word][phoneme]) || 1.0;
+                const wordDuration = wordDurations[word] || 1.0;
+                // Calculate actual duration as product of word and phoneme durations
+                const actualDuration = duration * wordDuration;
+                result.push([phoneme, Math.round(actualDuration * 100)]);
+            });
+        }
+    });
+    
+    return result;
+}
+
+// Trigger the duration change callback
+function triggerDurationChange() {
+    if (onDurationChangeCallback) {
+        const durations = getAllPhonemeDurations();
+        console.log('Phoneme durations:', durations);
+        onDurationChangeCallback(durations);
+    }
+}
+
 // Add initial help message
 function addInitialHelp() {
     // Only show the help message once
@@ -181,17 +238,27 @@ function renderWords() {
     const words = textInput.value.split(' ');
     wordDisplay.innerHTML = '';
     
-    words.forEach(word => {
+    words.forEach((word, index) => {
+        // Add insert silence button before each word (except the first)
+        if (index > 0) {
+            const insertBtn = document.createElement('button');
+            insertBtn.className = 'insert-silence';
+            insertBtn.innerHTML = '+';
+            insertBtn.title = 'Insert silence';
+            insertBtn.dataset.position = index;
+            wordDisplay.appendChild(insertBtn);
+        }
         // Check if word duration has been modified from default
         const isModified = wordDurations[word] && Math.abs(wordDurations[word] - 1.0) > 0.05;
         const isSelected = word === selectedWord;
         
         const wordBox = document.createElement('div');
-        wordBox.className = `word-box ${isSelected ? 'selected' : ''}`;
+        const isSilence = word === '<break/>';
+        wordBox.className = `word-box ${isSelected ? 'selected' : ''} ${isSilence ? 'silence' : ''}`;
         wordBox.dataset.word = word;
         wordBox.innerHTML = `
             <div class="word-content">
-                <div>${word}</div>
+                <div>${isSilence ? 'silence' : word}</div>
                 ${isModified ? `<button class="reset-word" title="Reset to default duration">↺</button>` : ''}
             </div>
             <div class="waveform">
@@ -226,7 +293,13 @@ function renderWords() {
 
 // Update phonemes display for the selected word
 function updatePhonemes(word) {
-    selectedWordElem.textContent = `"${word}"`;
+    selectedWordElem.textContent = `"${word === '<break/>' ? 'silence' : word}"`;
+    
+    // For silence blocks, don't show phonemes
+    if (word === '<break/>') {
+        phonemesContainer.innerHTML = '<div style="text-align: center; color: #666; font-style: italic;">Silence has no phonemes</div>';
+        return;
+    }
     
     // Generate phoneme data if it doesn't exist
     const wordPhonemes = generatePhonemeData(word);
@@ -317,8 +390,23 @@ function addEventListeners() {
         }
     });
     
-    // Word selection
+    // Word selection and silence insertion
     wordDisplay.addEventListener('click', e => {
+        // Handle silence insertion
+        if (e.target.classList.contains('insert-silence')) {
+            const position = parseInt(e.target.dataset.position);
+            const words = textInput.value.split(' ');
+            words.splice(position, 0, '<break/>');
+            textInput.value = words.join(' ');
+            
+            // Initialize duration for the new silence block
+            wordDurations['<break/>'] = 1.0;
+            
+            renderWords();
+            triggerDurationChange();
+            return;
+        }
+        
         const wordBox = e.target.closest('.word-box');
         if (wordBox) {
             // Update the selected word
@@ -419,6 +507,9 @@ function addEventListeners() {
                     const sliderValue = (2 - wordDurations[word]) * 50;
                     speedSlider.value = sliderValue;
                 }
+                
+                // Trigger duration change callback
+                triggerDurationChange();
             } else if (dragTarget.classList.contains('phoneme-box')) {
                 const phoneme = dragTarget.dataset.phoneme;
                 const baseWidth = 40; // Base width in pixels
@@ -450,6 +541,9 @@ function addEventListeners() {
                 
                 // Update overall word duration
                 updateWordDurationFromPhonemes(selectedWord);
+                
+                // Trigger duration change callback
+                triggerDurationChange();
             }
         }
         
@@ -484,6 +578,9 @@ function addEventListeners() {
             
             // Update the word width based on average of phoneme durations
             updateWordDurationFromPhonemes(selectedWord);
+            
+            // Trigger duration change callback
+            triggerDurationChange();
         }
         
         // Handle word reset buttons
@@ -525,6 +622,9 @@ function addEventListeners() {
             
             // Remove the reset button
             resetButton.remove();
+            
+            // Trigger duration change callback
+            triggerDurationChange();
         }
     });
     
@@ -559,6 +659,9 @@ function addEventListeners() {
                     // Remove the reset button if duration is close to default
                     resetButton.remove();
                 }
+                
+                // Trigger duration change callback
+                triggerDurationChange();
             }
         } else {
             // In advanced mode, adjust all phonemes proportionally
@@ -582,6 +685,9 @@ function addEventListeners() {
                     const baseWidth = parseInt(wordBox.dataset.baseWidth) || 80;
                     wordBox.style.width = `${baseWidth * wordDurations[selectedWord]}px`;
                 }
+                
+                // Trigger duration change callback
+                triggerDurationChange();
             }
         }
     });
@@ -654,6 +760,440 @@ function switchMode(mode) {
         togglePhonemesBtn.querySelector('span:first-child').textContent = 'Hide phonemes';
         togglePhonemesBtn.classList.add('active');
     }
+}
+
+// Add authentication event listeners
+function addAuthEventListeners() {
+    // Login button click
+    loginBtn.addEventListener('click', () => {
+        loginModal.classList.add('active');
+    });
+    
+    // Cancel login
+    cancelLoginBtn.addEventListener('click', () => {
+        loginModal.classList.remove('active');
+        loginForm.reset();
+    });
+    
+    // Close modal on background click
+    loginModal.addEventListener('click', (e) => {
+        if (e.target === loginModal) {
+            loginModal.classList.remove('active');
+            loginForm.reset();
+        }
+    });
+    
+    // Login form submission
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        
+        // Disable form during login
+        loginForm.querySelectorAll('input, button').forEach(el => el.disabled = true);
+        
+        const result = await daisysAPI.login(username, password);
+        
+        if (result.success) {
+            loginModal.classList.remove('active');
+            loginForm.reset();
+            updateAuthUI();
+            updateUIState();
+        } else {
+            alert('Login failed. Please check your credentials.');
+        }
+        
+        // Re-enable form
+        loginForm.querySelectorAll('input, button').forEach(el => el.disabled = false);
+    });
+    
+    // Logout button
+    logoutBtn.addEventListener('click', () => {
+        daisysAPI.logout();
+        updateAuthUI();
+        updateUIState();
+    });
+}
+
+// Update authentication UI
+function updateAuthUI() {
+    if (daisysAPI.isLoggedIn()) {
+        loginBtn.style.display = 'none';
+        userInfo.style.display = 'flex';
+        usernameDisplay.textContent = daisysAPI.username;
+    } else {
+        loginBtn.style.display = 'block';
+        userInfo.style.display = 'none';
+    }
+}
+
+// State management
+let hasGeneratedPreview = false;
+let currentAudio = null;
+let previewHistory = [];
+let currentSessionId = Date.now().toString();
+
+// Update UI state based on login and preview status
+function updateUIState() {
+    const isLoggedIn = daisysAPI.isLoggedIn();
+    
+    // Show/hide preview button based on login status
+    playBtn.style.display = isLoggedIn ? 'flex' : 'none';
+    
+    // Show/hide word display based on preview status
+    wordDisplay.style.display = hasGeneratedPreview ? 'flex' : 'none';
+    
+    // Show/hide editor based on preview status
+    document.querySelector('.word-editor').style.display = hasGeneratedPreview ? 'block' : 'none';
+    
+    // Enable/disable text input based on preview status
+    textInput.disabled = hasGeneratedPreview;
+    if (hasGeneratedPreview) {
+        textInput.style.opacity = '0.6';
+        textInput.style.cursor = 'not-allowed';
+    } else {
+        textInput.style.opacity = '1';
+        textInput.style.cursor = 'text';
+    }
+    
+    // Update instruction text
+    const instruction = document.querySelector('.instruction');
+    if (!isLoggedIn) {
+        instruction.innerHTML = '<p>Please login to use the timing editor</p>';
+    } else if (!hasGeneratedPreview) {
+        instruction.innerHTML = '<p>Click "Preview timing" to generate speech and start editing</p>';
+    } else {
+        instruction.innerHTML = `
+            <p><span class="highlight">Drag the blue handles</span> on word edges to adjust duration or use the slider for precise control</p>
+            <p class="subinstruction">Click on any word to select it and adjust its timing</p>
+        `;
+    }
+}
+
+// Modified play button handler
+async function handlePlayClick() {
+    if (!daisysAPI.isLoggedIn()) return;
+    
+    playBtn.disabled = true;
+    playBtn.innerHTML = `
+        <div class="spinner"></div>
+        <span>Generating...</span>
+    `;
+    
+    try {
+        // Get or create voice
+        const voiceId = await daisysAPI.getOrCreateVoice();
+        
+        // Get phoneme durations
+        const durations = getAllPhonemeDurations();
+        
+        // Generate TTS
+        const result = await daisysAPI.generateTTS(textInput.value, voiceId, durations);
+        
+        // Create audio element
+        if (currentAudio) {
+            currentAudio.pause();
+        }
+        
+        currentAudio = new Audio(result.audioUrl);
+        
+        // Play the audio
+        await currentAudio.play();
+        
+        // Update UI state
+        if (!hasGeneratedPreview) {
+            hasGeneratedPreview = true;
+            updateUIState();
+            
+            // Initialize word timings (mock data for now)
+            initializeWordTimings();
+            renderWords();
+        }
+        
+        // Add to history
+        addToHistory({
+            id: Date.now().toString(),
+            sessionId: currentSessionId,
+            text: textInput.value,
+            audioUrl: result.audioUrl,
+            durations: durations,
+            timestamp: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        console.error('TTS generation failed:', error);
+        alert('Failed to generate speech. Please try again.');
+    } finally {
+        playBtn.disabled = false;
+        playBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" width="24" height="24">
+                <path d="M8 5v14l11-7z"></path>
+            </svg>
+            <span>Preview timing</span>
+        `;
+    }
+}
+
+// Initialize word timings from TTS response (mock for now)
+function initializeWordTimings() {
+    const words = textInput.value.split(' ');
+    words.forEach(word => {
+        if (!wordDurations[word]) {
+            // Generate random timings for demo
+            wordDurations[word] = 0.8 + Math.random() * 0.4;
+            
+            const phonemes = generatePhonemeData(word);
+            phonemeDurations[word] = {};
+            phonemes.forEach(phoneme => {
+                phonemeDurations[word][phoneme] = 0.8 + Math.random() * 0.4;
+            });
+        }
+    });
+}
+
+// History management
+function addToHistory(entry) {
+    // Load existing history
+    const history = JSON.parse(localStorage.getItem('previewHistory') || '[]');
+    history.push(entry);
+    
+    // Keep only last 100 entries
+    if (history.length > 100) {
+        history.shift();
+    }
+    
+    localStorage.setItem('previewHistory', JSON.stringify(history));
+    previewHistory = history;
+    
+    updateHistoryUI();
+}
+
+// Update history UI
+function updateHistoryUI() {
+    const historyContent = document.getElementById('history-content');
+    const history = JSON.parse(localStorage.getItem('previewHistory') || '[]');
+    
+    if (history.length === 0) {
+        historyContent.innerHTML = '<div class="history-empty">No preview history yet</div>';
+        return;
+    }
+    
+    // Group by session
+    const sessions = {};
+    history.forEach(item => {
+        const date = new Date(item.timestamp).toDateString();
+        if (!sessions[date]) {
+            sessions[date] = [];
+        }
+        sessions[date].push(item);
+    });
+    
+    // Render sessions
+    historyContent.innerHTML = '';
+    Object.entries(sessions).reverse().forEach(([date, items]) => {
+        const sessionDiv = document.createElement('div');
+        sessionDiv.className = 'history-session';
+        sessionDiv.innerHTML = `
+            <div class="session-header">
+                <div class="session-info">
+                    <span class="session-date">${date}</span>
+                    <span class="session-count">${items.length} previews</span>
+                </div>
+                <div class="session-toggle">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"></path>
+                    </svg>
+                </div>
+            </div>
+            <div class="session-items"></div>
+        `;
+        
+        const itemsContainer = sessionDiv.querySelector('.session-items');
+        items.reverse().forEach(item => {
+            const time = new Date(item.timestamp).toLocaleTimeString();
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'history-item';
+            itemDiv.innerHTML = `
+                <div class="item-info">
+                    <div class="item-text">${item.text}</div>
+                    <div class="item-time">${time}</div>
+                </div>
+                <div class="item-actions">
+                    <button class="play-history" title="Play audio" data-id="${item.id}">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M8 5v14l11-7z"></path>
+                        </svg>
+                    </button>
+                    <button class="restore-history" title="Restore durations" data-id="${item.id}">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/>
+                        </svg>
+                    </button>
+                    <button class="delete-history" title="Delete" data-id="${item.id}">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                        </svg>
+                    </button>
+                </div>
+            `;
+            itemsContainer.appendChild(itemDiv);
+        });
+        
+        historyContent.appendChild(sessionDiv);
+    });
+}
+
+// Add history widget event listeners
+function addHistoryEventListeners() {
+    const historyWidget = document.getElementById('history-widget');
+    const toggleHistory = document.getElementById('toggle-history');
+    const historyHeader = document.querySelector('.history-header');
+    
+    // Toggle history widget collapse
+    historyHeader.addEventListener('click', () => {
+        historyWidget.classList.toggle('collapsed');
+    });
+    
+    // Session toggle
+    document.addEventListener('click', (e) => {
+        if (e.target.closest('.session-header')) {
+            const session = e.target.closest('.history-session');
+            session.classList.toggle('expanded');
+        }
+        
+        // Play history audio
+        if (e.target.closest('.play-history')) {
+            const id = e.target.closest('.play-history').dataset.id;
+            const history = JSON.parse(localStorage.getItem('previewHistory') || '[]');
+            const item = history.find(h => h.id === id);
+            
+            if (item && item.audioUrl) {
+                if (currentAudio) {
+                    currentAudio.pause();
+                }
+                currentAudio = new Audio(item.audioUrl);
+                currentAudio.play();
+            }
+        }
+        
+        // Restore history durations
+        if (e.target.closest('.restore-history')) {
+            const id = e.target.closest('.restore-history').dataset.id;
+            const history = JSON.parse(localStorage.getItem('previewHistory') || '[]');
+            const item = history.find(h => h.id === id);
+            
+            if (item && item.durations) {
+                // Restore the durations
+                restoreDurations(item.durations);
+                renderWords();
+                updatePhonemes(selectedWord);
+                triggerDurationChange();
+            }
+        }
+        
+        // Delete history item
+        if (e.target.closest('.delete-history')) {
+            const id = e.target.closest('.delete-history').dataset.id;
+            let history = JSON.parse(localStorage.getItem('previewHistory') || '[]');
+            history = history.filter(h => h.id !== id);
+            localStorage.setItem('previewHistory', JSON.stringify(history));
+            updateHistoryUI();
+        }
+    });
+}
+
+// Restore durations from history
+function restoreDurations(durations) {
+    // Reset all durations
+    wordDurations = {};
+    phonemeDurations = {};
+    
+    // Parse durations and rebuild word/phoneme durations
+    let currentWord = '';
+    const words = textInput.value.split(' ');
+    let wordIndex = 0;
+    
+    durations.forEach(([phoneme, duration]) => {
+        if (phoneme === '<silence>') {
+            // Handle silence
+            wordDurations['<break/>'] = duration / 100;
+        } else {
+            // Find which word this phoneme belongs to
+            if (!currentWord || !phonemeDurations[currentWord]) {
+                currentWord = words[wordIndex++];
+                if (!phonemeDurations[currentWord]) {
+                    phonemeDurations[currentWord] = {};
+                }
+            }
+            
+            phonemeDurations[currentWord][phoneme] = duration / 100;
+        }
+    });
+    
+    // Calculate word durations from phoneme durations
+    Object.keys(phonemeDurations).forEach(word => {
+        const phonemes = Object.values(phonemeDurations[word]);
+        if (phonemes.length > 0) {
+            wordDurations[word] = phonemes.reduce((a, b) => a + b, 0) / phonemes.length;
+        }
+    });
+}
+
+// Add CSS for spinner
+const style = document.createElement('style');
+style.textContent = `
+    .spinner {
+        width: 20px;
+        height: 20px;
+        border: 2px solid #ffffff;
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    
+    .play-btn:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+`;
+document.head.appendChild(style);
+
+// Modified init function
+function init() {
+    // Initialize default durations
+    const words = textInput.value.split(' ');
+    words.forEach(word => {
+        wordDurations[word] = 1.0; // Default duration multiplier
+        
+        // Generate phoneme data if needed
+        const wordPhonemes = generatePhonemeData(word);
+        
+        phonemeDurations[word] = {};
+        wordPhonemes.forEach(phoneme => {
+            phonemeDurations[word][phoneme] = 1.0; // Default phoneme duration
+        });
+    });
+    
+    renderWords();
+    updatePhonemes(selectedWord);
+    addEventListeners();
+    addAuthEventListeners();
+    addHistoryEventListeners();
+    addInitialHelp();
+    
+    // Update UI based on initial state
+    updateAuthUI();
+    updateUIState();
+    updateHistoryUI();
+    
+    // Replace the old play button handler
+    playBtn.removeEventListener('click', playBtn.onclick);
+    playBtn.addEventListener('click', handlePlayClick);
 }
 
 // Initialize the app when the DOM is loaded

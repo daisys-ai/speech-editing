@@ -1,1 +1,62 @@
 * Setup
+
+In this folder you will find an HTML/JS-only static page that gives a nice
+interface for editing the timings of words in a sentence.
+
+You can drag the edges of words, and if you click on a word, you see the
+individual phonemes.
+
+I'd like you to do a few initial improvements, and then make some important
+changes. Initial improvements:
+
+1. Can you print out the durations of all phonemes in console.log as I move the
+   handles around?  I want to see an array of [phoneme, duration] pairs like
+   this: [["k", 3], ["w", 2], ["i", 1], ["k": 3]] (for the word "quick", just an
+   example but you should handle the whole sentence).  I want this printing to
+   come from a callback on duration changes that I can hook into later for a
+   different purpose.
+2. Can you add the ability to insert "silence" as a word, if I click between the
+   words?  You'll need some sort of subtle icon for this, and a way of tracking
+   in the code that there is silence there. Silence blocks should just be
+   treated as words. If needed, you can represent them in the text with a
+   self-closing "<break/>" tag.
+3. Back this thing up with an extremely simple server, perhaps using FastAPI.
+   Ideally I want the app to be hostable as a static page but for development it
+   can be useful to be serving it, and I may have the need for an endpoint or
+   two.
+
+Now for the important changes:
+
+1. Add in the top corner a login button that gives a username and password
+   field.  The password field should have masked text, and auto-fill between
+   sessions using cookies.  No need to show the fields if the user is already
+   logged in, you can just indicate that, and show a logout icon.
+2. I want you do add support for the Daisys API.  You can find full instructions
+   here: https://daisys-ai.github.io/daisys-api-python/daisys-api-doc.txt
+3. What I'd like you to use the API for is: for login, and doing so, save the
+   accesss token in a local storage or cookie so that the user remains logged in
+   unless he logs out.
+4. For text to voice. There is a sentence there already, and when the user
+   clicks "Preview timing" I'd like you to use the service to perform TTS using
+   /take/generate, get the audio, and play it back. You can have an adequate
+   waiting spinner. For a voice, please choose a default voice or create one,
+   but it has to be for the "infilling-en" model.  I'd like you to do all of
+   this in JavaScript on the client side.  Server is there only for static
+   serving of the interface.
+5. In fact it should not show the word timings at all until it is able to
+   retrieve them from the TakeResponse object. (I will add instructions on how
+   to do this later, for now assume all words are composed of arbitrary phonemes
+   composed of their letters, and timings are some random small integer.)
+   Therefore we should not see the duration editing interface until the first
+   preview has occurred.  And we should not see preview button until the user
+   has logged in.
+6. Each preview should be kept in a history and it should be possible to jump
+   back to the audio and durations associated with some item in that history.
+   Please make a widget to track historical clicks of the play button and offer
+   a delete button for the items.  This can all go into local storage, so you
+   should also have "folders" per sentence.
+7. By the way that means that after the sentence is established, the user should
+   not be able to edit it, so the input dialog should be visually disabled.  You
+   should organize the history hierarchically so that I can see previous
+   sessions and then drill down into previous states (durations and audio
+   examples) from those sessions.

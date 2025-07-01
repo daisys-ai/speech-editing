@@ -12,9 +12,14 @@ class DaisysAPI {
     
     // Load tokens from localStorage
     loadTokens() {
-        this.accessToken = localStorage.getItem('daisys_access_token');
-        this.refreshToken = localStorage.getItem('daisys_refresh_token');
-        this.username = localStorage.getItem('daisys_username');
+        const accessToken = localStorage.getItem('daisys_access_token');
+        const refreshToken = localStorage.getItem('daisys_refresh_token');
+        const username = localStorage.getItem('daisys_username');
+        
+        // Ensure we don't store "undefined" as a string
+        this.accessToken = (accessToken && accessToken !== 'undefined') ? accessToken : null;
+        this.refreshToken = (refreshToken && refreshToken !== 'undefined') ? refreshToken : null;
+        this.username = (username && username !== 'undefined') ? username : null;
     }
 
     // Check if user is logged in
@@ -57,13 +62,16 @@ class DaisysAPI {
             const data = await response.json();
             console.log('Login successful, received tokens');
             
-            // Store tokens
-            this.accessToken = data.access;
-            this.refreshToken = data.refresh;
+            // Store tokens - ensure they exist before storing
+            if (data.access) {
+                this.accessToken = data.access;
+                localStorage.setItem('daisys_access_token', data.access);
+            }
+            if (data.refresh) {
+                this.refreshToken = data.refresh;
+                localStorage.setItem('daisys_refresh_token', data.refresh);
+            }
             this.username = email;
-            
-            localStorage.setItem('daisys_access_token', data.access);
-            localStorage.setItem('daisys_refresh_token', data.refresh);
             localStorage.setItem('daisys_username', email);
             
             return { success: true, username: email };
@@ -82,6 +90,18 @@ class DaisysAPI {
         localStorage.removeItem('daisys_access_token');
         localStorage.removeItem('daisys_refresh_token');
         localStorage.removeItem('daisys_username');
+    }
+    
+    // Clear invalid tokens
+    clearInvalidTokens() {
+        const items = ['daisys_access_token', 'daisys_refresh_token'];
+        items.forEach(key => {
+            const value = localStorage.getItem(key);
+            if (value === 'undefined' || value === 'null' || !value) {
+                localStorage.removeItem(key);
+            }
+        });
+        this.loadTokens();
     }
 
     // Get or create a voice for infilling-en model
@@ -151,6 +171,13 @@ class DaisysAPI {
                     duration: 2.5,
                     normalizedText: text
                 };
+            }
+            
+            console.log('Generating TTS with token:', this.accessToken);
+            
+            // Ensure we have a valid token
+            if (!this.accessToken || this.accessToken === 'undefined') {
+                throw new Error('No valid access token available');
             }
             
             // Format the text with prosody controls based on durations

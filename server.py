@@ -31,10 +31,14 @@ async def read_index():
         "MOCK_TOKEN": os.getenv("MOCK_TOKEN", "")
     }
     
+    # Convert to proper JSON
+    import json
+    env_json = json.dumps(env_vars)
+    
     # Inject environment variables into the HTML
     env_script = f"""
     <script>
-        window.ENV = {env_vars};
+        window.ENV = {env_json};
     </script>
     """
     

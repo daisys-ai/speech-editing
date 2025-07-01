@@ -1177,6 +1177,9 @@ document.head.appendChild(style);
 
 // Modified init function
 function init() {
+    // Clear any invalid tokens first
+    daisysAPI.clearInvalidTokens();
+    
     // Initialize default durations
     const words = textInput.value.split(' ');
     words.forEach(word => {

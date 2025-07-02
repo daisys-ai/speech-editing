@@ -24,9 +24,26 @@ const paceValue = document.getElementById('pace-value');
 const expressionValue = document.getElementById('expression-value');
 const playAgainBtn = document.getElementById('play-again-btn');
 const startAgainBtn = document.getElementById('start-again-btn');
+const errorMessage = document.getElementById('error-message');
 
 // Initialize Daisys API
 const daisysAPI = new DaisysAPI();
+
+// Error display function
+function showError(message) {
+    errorMessage.textContent = message;
+    errorMessage.style.display = 'block';
+    
+    // Auto-hide after 10 seconds
+    setTimeout(() => {
+        errorMessage.style.display = 'none';
+    }, 10000);
+}
+
+// Clear error message
+function clearError() {
+    errorMessage.style.display = 'none';
+}
 
 // Mock data for phonemes (in a real app, this would come from an API)
 const phonemeData = {
@@ -1002,7 +1019,7 @@ async function createVoiceWithUI() {
         updateUIState();
     } catch (error) {
         console.error('Failed to create voice:', error);
-        alert('Failed to create voice. You may need to try logging in again.');
+        showError('Failed to create voice. You may need to try logging in again.');
         
         // Update UI to show error state
         updateUIState();
@@ -1049,6 +1066,9 @@ function addAuthEventListeners() {
             // Reload tokens to ensure they're properly set
             daisysAPI.loadTokens();
             
+            // Clear any errors on successful login
+            clearError();
+            
             updateAuthUI();
             updateUIState();
             
@@ -1062,7 +1082,7 @@ function addAuthEventListeners() {
         } else {
             // Show more detailed error message
             const errorMsg = result.error || 'Login failed. Please check your credentials.';
-            alert(`Login failed: ${errorMsg}\n\nTip: You can enable mock mode by adding ?mock=true to the URL or setting MOCK_MODE=true in your .env file.`);
+            showError(`Login failed: ${errorMsg}. Tip: Enable mock mode with ?mock=true`);
         }
         
         // Re-enable form
@@ -1199,6 +1219,9 @@ async function handlePlayClick() {
     `;
     
     try {
+        // Clear any previous errors
+        clearError();
+        
         // Check if we have a voice ID
         if (!daisysAPI.voiceId) {
             console.log('No voice ID found, creating one...');
@@ -1304,6 +1327,9 @@ async function handlePlayClick() {
             // Show play-again and start-again buttons
             playAgainBtn.style.display = 'flex';
             startAgainBtn.style.display = 'flex';
+            
+            // Clear any errors on successful playback
+            clearError();
         } catch (audioError) {
             console.error('Failed to fetch/play audio:', audioError);
             throw audioError;
@@ -1354,7 +1380,7 @@ async function handlePlayClick() {
         
     } catch (error) {
         console.error('TTS generation failed:', error);
-        alert('Failed to generate speech. Please try again.');
+        showError('Failed to generate speech. Please try again.');
     } finally {
         playBtn.disabled = false;
         playBtn.innerHTML = `
@@ -1818,6 +1844,9 @@ function init() {
     
     // Add start-again button handler
     startAgainBtn.addEventListener('click', () => {
+        // Clear any errors
+        clearError();
+        
         // Reset all state
         hasGeneratedPreview = false;
         originalTakeId = null;
@@ -1868,6 +1897,11 @@ function init() {
         
         renderWords();
         updatePhonemes(selectedWord);
+    });
+    
+    // Listen for error events from daisys-api
+    window.addEventListener('daisys-error', (event) => {
+        showError(event.detail.message);
     });
     
     // Check if we're logged in but don't have a voice

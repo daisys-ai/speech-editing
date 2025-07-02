@@ -35,7 +35,10 @@ class DaisysAPI {
                     console.error('Auto-refresh failed:', error);
                     // If refresh fails, prompt for login
                     this.logout();
-                    alert('Your session has expired. Please login again.');
+                    // Dispatch event to show error in UI
+                    window.dispatchEvent(new CustomEvent('daisys-error', {
+                        detail: { message: 'Your session has expired. Please login again.' }
+                    }));
                 });
             }
         }, 50 * 60 * 1000);

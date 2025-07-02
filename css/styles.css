@@ -804,6 +804,30 @@ textarea:focus {
     margin-top: 5px;
 }
 
+/* Error message styles */
+.error-message {
+    font-size: 13px;
+    color: #d93025;
+    text-align: center;
+    margin: 10px 20px;
+    padding: 10px;
+    background-color: #fef1f0;
+    border: 1px solid #f8d7da;
+    border-radius: 6px;
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 /* Help Message */
 .help-message {
     position: fixed;

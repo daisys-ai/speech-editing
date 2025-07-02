@@ -293,3 +293,12 @@ Works great. Now some refinements.
 
 Since this is pretty much a static single page app, can you add a CI/CD github
 step that pushes it to the gh-pages branch?
+
+Okay finally figured that out on github and didn't need Claude's help with it,
+so had to undo some things.
+
+** More refinement
+
+Can you make it so that when a voice fails to be generated, or any other errors,
+that a message gets added to the screen in a small font below where it says
+"Voice setup required." instead of using an alert()?  Please avoid alert().

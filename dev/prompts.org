@@ -288,3 +288,8 @@ Works great. Now some refinements.
    demo", adjust font size if you need to fit that on the page.  Perhaps put
    DAISYS in a smaller font above, then "speech editing" bigger, and "demo"
    smaller again below that.
+
+** Now thinking about hosting
+
+Since this is pretty much a static single page app, can you add a CI/CD github
+step that pushes it to the gh-pages branch?

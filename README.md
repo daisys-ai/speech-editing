@@ -1,202 +1,91 @@
-# Word Duration Editor
+# DAISYS Speech Editing Demo
 
-A web-based interface for editing word and phoneme timings for text-to-speech synthesis, integrated with the Daisys API.
+A web-based interface for editing speech timing at the phoneme level using the DAISYS TTS API.
 
 ## Features
 
-### Core Functionality
-- **Word Duration Editing**: Drag handles on word edges to adjust duration
-- **Phoneme-Level Control**: Advanced mode allows editing individual phoneme durations
-- **Silence Insertion**: Click between words to insert silence/pause blocks
-- **Real-time Feedback**: Console logging of phoneme durations as you edit
-- **History Management**: Track and restore previous timing configurations
+- Visual word and phoneme duration editing via drag handles
+- Real-time speech regeneration with edited timings
+- Prosody controls (pitch, pace, expression)
+- Session history with full state restoration
+- SIL (silence) token manipulation
+- Authentication with DAISYS API
 
-### User Interface
-- **Simple Mode**: Focus on word-level timing adjustments
-- **Advanced Mode**: Access to phoneme-level editing
-- **Authentication**: Secure login with Daisys API credentials
-- **Session Persistence**: Maintains login state across browser sessions
-- **Hierarchical History**: Browse previous edits organized by date
+## Demo
 
-## Setup
+Once deployed to GitHub Pages, you can access the demo at:
+```
+https://YOUR_USERNAME.github.io/YOUR_REPO/
+```
 
-### Prerequisites
-- Python 3.8+
-- Node.js (optional, for development)
-
-### Installation
+## Local Development
 
 1. Clone the repository
-2. Install Python dependencies:
+2. Install dependencies:
    ```bash
-   pip install -r requirements.txt
+   pip install fastapi uvicorn python-dotenv
    ```
-
-3. Configure environment variables:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
-   ```
-
-### Configuration Options
-
-The application supports multiple configuration methods:
-
-#### 1. Environment Variables (.env file)
-
-Create a `.env` file based on `.env.example`:
-
-```bash
-# API URL for Daisys TTS services (default: https://api.daisys.ai)
-DAISYS_API_URL=https://api.daisys.ai
-
-# Authentication URL for Daisys login (default: https://api.daisys.ai)
-DAISYS_AUTH_URL=https://api.daisys.ai
-
-# Enable mock mode for testing without real API access (default: false)
-MOCK_MODE=false
-
-# Mock authentication credentials (only used when MOCK_MODE=true)
-MOCK_USERNAME=test@example.com
-MOCK_TOKEN=mock_token_for_testing
-```
-
-#### 2. URL Parameters
-
-You can override configuration using URL parameters:
-- `?mock=true` - Enable mock mode
-- `?api_url=https://custom-api.example.com` - Override API URL
-- `?auth_url=https://custom-auth.example.com` - Override auth URL
-
-Example: `http://localhost:8000/?mock=true`
-
-## Running the Application
-
-### Development Mode (with Mock API)
-
-1. Create a `.env` file with mock mode enabled:
-   ```bash
-   MOCK_MODE=true
-   ```
-
-2. Start the server:
+3. Copy `.env.example` to `.env` and configure your DAISYS API endpoints
+4. Run the server:
    ```bash
    python server.py
    ```
+5. Open http://localhost:8001 in your browser
 
-3. Open http://localhost:8000 in your browser
+## GitHub Pages Deployment
 
-4. Login with any username/password (mock mode accepts any credentials)
+The app is automatically deployed to GitHub Pages when you push to the main branch.
 
-### Production Mode (with Real Daisys API)
+### Configuring the Deployed App
 
-1. Configure your `.env` file with real API endpoints:
-   ```bash
-   DAISYS_API_URL=https://api.daisys.ai
-   DAISYS_AUTH_URL=https://api.daisys.ai
-   MOCK_MODE=false
-   ```
+Since GitHub Pages serves static files, you can configure the API endpoints using URL parameters:
 
-2. Start the server:
-   ```bash
-   python server.py
-   ```
-
-3. Login with your Daisys API credentials
-
-## Usage Guide
-
-### Initial Setup
-1. Click "Login" in the top right corner
-2. Enter your credentials (or any credentials in mock mode)
-3. The interface will show "Generate" button once logged in
-
-### Editing Workflow
-1. Enter or modify text in the input field
-2. Click "Generate" to generate initial speech
-3. The timing interface will appear with draggable word blocks
-4. Adjust timings by:
-   - Dragging word edges (blue handles)
-   - Using the speed slider for selected words
-   - Clicking words to select them
-   - Inserting silence with "+" buttons between words
-
-### Advanced Features
-- **Switch Modes**: Toggle between Simple and Advanced modes
-- **Phoneme Editing**: In Advanced mode, edit individual phoneme durations
-- **History**: View and restore previous timing configurations
-- **Reset**: Click the reset button (↺) on modified words/phonemes
-
-## API Integration
-
-The application integrates with Daisys API for:
-- User authentication (`/auth/login`)
-- Voice management (`/v1/speak/voices`)
-- TTS generation (`/v1/speak/takes/generate`)
-
-### Authentication Flow
-1. Login credentials are sent to the auth endpoint
-2. Access and refresh tokens are stored in localStorage
-3. Tokens are included in subsequent API requests
-
-### TTS Generation
-1. Text and timing information are sent to the TTS endpoint
-2. Audio URL is returned and played in the browser
-3. Timing data is stored in history for later retrieval
-
-## Development
-
-### Project Structure
 ```
-/workspace/
-├── index.html          # Main HTML interface
-├── css/
-│   └── styles.css      # UI styling
-├── js/
-│   ├── config.js       # Configuration loader
-│   ├── daisys-api.js   # API integration
-│   └── app.js          # Main application logic
-├── server.py           # FastAPI server
-├── requirements.txt    # Python dependencies
-├── .env.example        # Environment configuration template
-└── README.md           # This file
+https://YOUR_USERNAME.github.io/YOUR_REPO/?api_url=YOUR_API_URL&auth_url=YOUR_AUTH_URL
 ```
 
-### Mock Mode Features
-When `MOCK_MODE=true`:
-- Authentication accepts any credentials
-- TTS returns silent audio placeholders
-- No actual API calls are made
-- Useful for UI development and testing
+For example:
+```
+https://example.github.io/daisys-demo/?api_url=https://api.daisys.com&auth_url=https://auth.daisys.com
+```
 
-### Extending the Application
-- **Custom Phoneme Mappings**: Edit the phoneme data in `app.js`
-- **New TTS Models**: Modify voice creation in `daisys-api.js`
-- **Additional UI Features**: Extend the interface in `index.html` and `styles.css`
+### Mock Mode
 
-## Troubleshooting
+To test the UI without a real DAISYS API, enable mock mode:
+```
+https://YOUR_USERNAME.github.io/YOUR_REPO/?mock=true
+```
 
-### Login Issues
-- Check console for error messages
-- Verify API URLs in configuration
-- Ensure CORS is properly configured on API server
-- Try mock mode to isolate authentication issues
+## Requirements
 
-### TTS Generation Failures
-- Verify access token is valid
-- Check API quotas and limits
-- Monitor console for detailed error messages
-- Test with mock mode to ensure UI works correctly
+- Python 3.7+ with FastAPI (for local development)
+- DAISYS API credentials (for real speech generation)
+- Modern web browser with JavaScript enabled
 
-### UI Not Updating
-- Clear browser cache and localStorage
-- Check for JavaScript errors in console
-- Verify all script files are loading correctly
-- Ensure server is running and accessible
+## Usage
 
-## Future Enhancements
-- Real-time waveform visualization
-- Export/import timing configurations
-- Batch processing for multiple sentences
-- Integration with additional TTS providers
-- WebSocket support for real-time updates
+1. **Login**: Click the login button and enter your DAISYS credentials
+2. **Enter Text**: Type the text you want to synthesize
+3. **Generate**: Click "Generate" to create the initial speech
+4. **Edit Timing**: 
+   - Click on words to select them
+   - Drag the blue handles on word edges to adjust duration
+   - Click "Show phonemes" to edit individual phoneme durations
+   - Drag SIL tokens to adjust silence duration
+5. **Regenerate**: Click "Regenerate" to synthesize with your timing edits
+6. **History**: Previous generations are saved and can be restored
+
+## API Configuration
+
+The app requires two endpoints:
+- `DAISYS_API_URL`: The main DAISYS API endpoint for TTS generation
+- `DAISYS_AUTH_URL`: The authentication endpoint for login
+
+These can be configured via:
+1. Environment variables in `.env` file (local development)
+2. URL parameters (GitHub Pages deployment)
+3. Mock mode for testing without API access
+
+## License
+
+This demo is provided as-is for educational and testing purposes.

@@ -26,7 +26,9 @@ jobs:
           
           # Copy only the necessary files for the static site
           cp -r index.html css js build/
-          cp .nojekyll build/
+          
+          # Create .nojekyll file to prevent Jekyll processing
+          touch build/.nojekyll
           
           # Create a simple README for the gh-pages branch
           echo "# DAISYS Speech Editing Demo" > build/README.md

@@ -10,18 +10,51 @@ class DaisysAPI {
         this.mockMode = window.config.MOCK_MODE;
         
         // Store voice ID
-        this.voiceId = localStorage.getItem('daisys_voice_id');
+        this.voiceId = sessionStorage.getItem('daisys_voice_id');
         
         // Voice creation state
         this.isCreatingVoice = false;
+        
+        // Auto-refresh timer
+        this.refreshTimer = null;
+        this.startRefreshTimer();
     }
     
-    // Load tokens from localStorage
+    // Start auto-refresh timer
+    startRefreshTimer() {
+        // Clear existing timer if any
+        if (this.refreshTimer) {
+            clearInterval(this.refreshTimer);
+        }
+        
+        // Set up refresh every 50 minutes (50 * 60 * 1000 ms)
+        this.refreshTimer = setInterval(() => {
+            if (this.isLoggedIn() && this.refreshToken) {
+                console.log('Auto-refreshing token...');
+                this.refreshAccessToken().catch(error => {
+                    console.error('Auto-refresh failed:', error);
+                    // If refresh fails, prompt for login
+                    this.logout();
+                    alert('Your session has expired. Please login again.');
+                });
+            }
+        }, 50 * 60 * 1000);
+    }
+    
+    // Stop auto-refresh timer
+    stopRefreshTimer() {
+        if (this.refreshTimer) {
+            clearInterval(this.refreshTimer);
+            this.refreshTimer = null;
+        }
+    }
+    
+    // Load tokens from sessionStorage
     loadTokens() {
-        const accessToken = localStorage.getItem('daisys_access_token');
-        const refreshToken = localStorage.getItem('daisys_refresh_token');
-        const username = localStorage.getItem('daisys_username');
-        const voiceId = localStorage.getItem('daisys_voice_id');
+        const accessToken = sessionStorage.getItem('daisys_access_token');
+        const refreshToken = sessionStorage.getItem('daisys_refresh_token');
+        const username = sessionStorage.getItem('daisys_username');
+        const voiceId = sessionStorage.getItem('daisys_voice_id');
         
         // Ensure we don't store "undefined" as a string
         this.accessToken = (accessToken && accessToken !== 'undefined') ? accessToken : null;
@@ -32,9 +65,7 @@ class DaisysAPI {
 
     // Check if user is logged in
     isLoggedIn() {
-        console.log('Checking login status, accessToken:', this.accessToken);
         const isValid = this.accessToken && this.accessToken !== 'undefined' && this.accessToken !== 'null';
-        console.log('isLoggedIn result:', isValid);
         return isValid;
     }
 
@@ -46,8 +77,8 @@ class DaisysAPI {
                 console.log('Mock mode enabled, using mock authentication');
                 this.accessToken = window.config.MOCK_TOKEN;
                 this.username = email;
-                localStorage.setItem('daisys_access_token', window.config.MOCK_TOKEN);
-                localStorage.setItem('daisys_username', email);
+                sessionStorage.setItem('daisys_access_token', window.config.MOCK_TOKEN);
+                sessionStorage.setItem('daisys_username', email);
                 return { success: true, username: email };
             }
             
@@ -71,29 +102,26 @@ class DaisysAPI {
             }
 
             const data = await response.json();
-            console.log('Login successful, received data:', data);
+            console.log('Login successful, received data:', Object.keys(data));
             
             // Store tokens - check different possible response formats
             const accessToken = data.access || data.access_token || data.accessToken;
             const refreshToken = data.refresh || data.refresh_token || data.refreshToken;
             
-            console.log('Extracted tokens - access:', accessToken, 'refresh:', refreshToken);
-            
             if (accessToken) {
                 this.accessToken = accessToken;
-                localStorage.setItem('daisys_access_token', accessToken);
-                console.log('Stored access token:', this.accessToken);
+                sessionStorage.setItem('daisys_access_token', accessToken);
             } else {
                 console.error('No access token found in response!');
             }
             
             if (refreshToken) {
                 this.refreshToken = refreshToken;
-                localStorage.setItem('daisys_refresh_token', refreshToken);
+                sessionStorage.setItem('daisys_refresh_token', refreshToken);
             }
             
             this.username = email;
-            localStorage.setItem('daisys_username', email);
+            sessionStorage.setItem('daisys_username', email);
             
             // Don't create voice here - we'll do it after login completes
             // so we can show proper UI feedback
@@ -111,19 +139,22 @@ class DaisysAPI {
         this.username = null;
         this.voiceId = null;
         
-        localStorage.removeItem('daisys_access_token');
-        localStorage.removeItem('daisys_refresh_token');
-        localStorage.removeItem('daisys_username');
-        localStorage.removeItem('daisys_voice_id');
+        sessionStorage.removeItem('daisys_access_token');
+        sessionStorage.removeItem('daisys_refresh_token');
+        sessionStorage.removeItem('daisys_username');
+        sessionStorage.removeItem('daisys_voice_id');
+        
+        // Stop the refresh timer
+        this.stopRefreshTimer();
     }
     
     // Clear invalid tokens
     clearInvalidTokens() {
         const items = ['daisys_access_token', 'daisys_refresh_token'];
         items.forEach(key => {
-            const value = localStorage.getItem(key);
+            const value = sessionStorage.getItem(key);
             if (value === 'undefined' || value === 'null' || !value) {
-                localStorage.removeItem(key);
+                sessionStorage.removeItem(key);
             }
         });
         this.loadTokens();
@@ -204,7 +235,7 @@ class DaisysAPI {
     }
 
     // Generate TTS with timing information
-    async generateTTS(text, voiceId, phonemeDurations) {
+    async generateTTS(text, voiceId, editedDurations, originalTakeId = null, prosody = null) {
         try {
             // If using mock mode, return mock data
             if (this.mockMode) {
@@ -213,11 +244,11 @@ class DaisysAPI {
                     takeId: 'mock_take_' + Date.now(),
                     audioUrl: 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=', // Silent audio
                     duration: 2.5,
-                    normalizedText: text
+                    normalizedText: text,
+                    phonemeDurations: [[[["h", 2], ["ə", 4], ["l", 8], ["oʊ", 27]]]]
                 };
             }
             
-            console.log('Generating TTS with token:', this.accessToken);
             console.log('Using voice ID:', voiceId);
             
             // Ensure we have a valid token
@@ -230,20 +261,48 @@ class DaisysAPI {
                 throw new Error('No voice ID provided for TTS generation');
             }
             
-            // Format the text with prosody controls based on durations
-            const formattedText = this.formatTextWithProsody(text, phonemeDurations);
+            let endpoint, requestBody;
             
-            const requestBody = {
-                voice_id: voiceId,
-                text: formattedText
-            };
+            if (originalTakeId && editedDurations) {
+                // Use regenerate endpoint for subsequent generations
+                endpoint = '/v1/speak/takes/regenerate';
+                
+                // Calculate edited text and phoneme durations
+                const editData = this.calculateEditedData(text, editedDurations, this.originalPhonemeDurations);
+                
+                requestBody = {
+                    voice_id: voiceId,
+                    text: text,
+                    edit_take_id: originalTakeId,
+                    text_to_edit: editData.textToEdit,
+                    phoneme_durations: editData.phonemeDurations
+                };
+                
+                // Add prosody if provided (all fields required for regenerate)
+                if (prosody) {
+                    requestBody.prosody = {
+                        pitch: prosody.pitch,
+                        pace: prosody.pace,
+                        expression: prosody.expression
+                    };
+                }
+            } else {
+                // Use generate endpoint for first generation
+                endpoint = '/v1/speak/takes/generate';
+                
+                requestBody = {
+                    voice_id: voiceId,
+                    text: text
+                };
+                
+                // Add prosody if provided (all values for initial generation)
+                if (prosody) {
+                    requestBody.prosody = prosody;
+                }
+            }
             
-            // Optionally add prosody based on durations (future enhancement)
-            // For now, we'll use default prosody
             
-            console.log('TTS request body:', JSON.stringify(requestBody, null, 2));
-            
-            const response = await fetch(`${this.apiUrl}/v1/speak/takes/generate`, {
+            const response = await fetch(`${this.apiUrl}${endpoint}`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${this.accessToken}`,
@@ -272,17 +331,22 @@ class DaisysAPI {
             console.log('Take created with ID:', takeId);
             
             // Poll for take status
-            await this.waitForTakeReady(takeId);
+            const readyData = await this.waitForTakeReady(takeId);
             
             // Construct audio URL
             const audioUrl = `${this.apiUrl}/v1/speak/takes/${takeId}/wav`;
             console.log('Audio URL:', audioUrl);
             
+            // Extract phoneme durations from the ready response
+            const phonemeDurations = readyData.info?.phoneme_durations || readyData.phoneme_durations || null;
+            console.log('Phoneme durations from API:', phonemeDurations);
+            
             return {
                 takeId: takeId,
                 audioUrl: audioUrl,
-                duration: data.duration || data.audio_duration || 0,
-                normalizedText: data.normalized_text || data.normalizedText || text
+                duration: readyData.info?.duration || data.duration || 0,
+                normalizedText: readyData.info?.normalized_text || data.normalized_text || text,
+                phonemeDurations: phonemeDurations
             };
         } catch (error) {
             console.error('TTS error:', error);
@@ -296,6 +360,84 @@ class DaisysAPI {
         // In a real implementation, we would use SSML-like tags
         // to control the duration of individual phonemes
         return text;
+    }
+    
+    // Calculate edited data for regenerate endpoint
+    calculateEditedData(text, allDurations, originalDurations) {
+        const words = text.split(' ');
+        const sentenceDurations = [];
+        const editedSpans = [];
+        let currentSpan = [];
+        let inEditedSpan = false;
+        
+        // Convert all durations to API format and find edited spans
+        words.forEach((word, index) => {
+            const wordPhonemes = [];
+            let isEdited = false;
+            
+            if (allDurations[word]) {
+                // Check if this word has been edited using index-based structure
+                if (window.wordPhonemeOrder && window.wordPhonemeOrder[word]) {
+                    const orderedPhonemes = window.wordPhonemeOrder[word];
+                    
+                    // Compare current durations with original
+                    for (let i = 0; i < orderedPhonemes.length; i++) {
+                        const [phoneme, origDuration] = orderedPhonemes[i];
+                        const currentDuration = allDurations[word][i];
+                        if (currentDuration && Math.abs(currentDuration - origDuration) > 1) {
+                            isEdited = true;
+                            break;
+                        }
+                    }
+                    
+                    // Add phonemes in the original order
+                    orderedPhonemes.forEach(([phoneme, _], idx) => {
+                        const duration = allDurations[word][idx];
+                        if (duration !== undefined) {
+                            wordPhonemes.push([phoneme, Math.round(duration)]);
+                        }
+                    });
+                }
+                
+                // Add SIL token if this word has one
+                if (window.silenceData && window.silenceData[word]) {
+                    wordPhonemes.push(['SIL', Math.round(window.silenceData[word])]);
+                }
+                
+                if (wordPhonemes.length > 0) {
+                    sentenceDurations.push(wordPhonemes);
+                }
+            }
+            
+            // Track edited words
+            if (isEdited) {
+                editedSpans.push(index);
+            }
+        });
+        
+        // Create continuous spans from edited indices
+        let textToEdit = [];
+        if (editedSpans.length > 0) {
+            // Find the minimum and maximum indices of edited words
+            const minIndex = Math.min(...editedSpans);
+            const maxIndex = Math.max(...editedSpans);
+            
+            // Create a span from first edited word to last edited word
+            const spanWords = [];
+            for (let i = minIndex; i <= maxIndex; i++) {
+                spanWords.push(words[i]);
+            }
+            
+            textToEdit = [spanWords.join(' ')];
+        } else {
+            // If nothing edited, use full text
+            textToEdit = [text];
+        }
+        
+        return {
+            textToEdit: textToEdit,
+            phonemeDurations: [sentenceDurations]
+        };
     }
     
     // Wait for take to be ready
@@ -355,7 +497,7 @@ class DaisysAPI {
 
             const data = await response.json();
             this.accessToken = data.access;
-            localStorage.setItem('daisys_access_token', data.access);
+            sessionStorage.setItem('daisys_access_token', data.access);
             
             return true;
         } catch (error) {

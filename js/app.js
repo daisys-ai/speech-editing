@@ -4,7 +4,7 @@ const wordDisplay = document.getElementById('word-display');
 const selectedWordElem = document.getElementById('selected-word');
 const phonemesContainer = document.getElementById('phonemes-container');
 const togglePhonemesBtn = document.getElementById('toggle-phonemes');
-const speedSlider = document.getElementById('speed-slider');
+// const speedSlider = document.getElementById('speed-slider'); // Removed
 const playBtn = document.getElementById('play-btn');
 const simpleMode = document.getElementById('simple-mode');
 const advancedMode = document.getElementById('advanced-mode');
@@ -16,6 +16,14 @@ const authContainer = document.getElementById('auth-container');
 const userInfo = document.getElementById('user-info');
 const usernameDisplay = document.getElementById('username-display');
 const logoutBtn = document.getElementById('logout-btn');
+const pitchSlider = document.getElementById('pitch-slider');
+const paceSlider = document.getElementById('pace-slider');
+const expressionSlider = document.getElementById('expression-slider');
+const pitchValue = document.getElementById('pitch-value');
+const paceValue = document.getElementById('pace-value');
+const expressionValue = document.getElementById('expression-value');
+const playAgainBtn = document.getElementById('play-again-btn');
+const startAgainBtn = document.getElementById('start-again-btn');
 
 // Initialize Daisys API
 const daisysAPI = new DaisysAPI();
@@ -39,10 +47,6 @@ const consonants = ['b', 'p', 'd', 't', 'g', 'k', 'f', 'v', 'θ', 'ð', 's', 'z'
 
 // Function to generate mock phoneme data for words
 function generatePhonemeData(word) {
-    if (word === '<break/>') {
-        return [];
-    }
-    
     if (phonemeData[word]) {
         return phonemeData[word];
     }
@@ -147,18 +151,16 @@ function getAllPhonemeDurations() {
     const words = textInput.value.split(' ').filter(word => word.trim() !== '');
     
     words.forEach(word => {
-        if (word === '<break/>') {
-            // Handle silence blocks
-            const duration = wordDurations[word] || 1.0;
-            result.push(['<silence>', Math.round(duration * 100)]);
+        if (phonemeDurations[word]) {
+            // Use actual phoneme durations
+            Object.entries(phonemeDurations[word]).forEach(([phoneme, duration]) => {
+                result.push([phoneme, Math.round(duration)]);
+            });
         } else {
+            // Fallback for words without phoneme data
             const phonemes = generatePhonemeData(word);
             phonemes.forEach(phoneme => {
-                const duration = (phonemeDurations[word] && phonemeDurations[word][phoneme]) || 1.0;
-                const wordDuration = wordDurations[word] || 1.0;
-                // Calculate actual duration as product of word and phoneme durations
-                const actualDuration = duration * wordDuration;
-                result.push([phoneme, Math.round(actualDuration * 100)]);
+                result.push([phoneme, 10]); // Default 10 frames
             });
         }
     });
@@ -233,32 +235,61 @@ function getBaseWidthForWord(word) {
     return calculatedWidth;
 }
 
+// Helper function to check if a word has been edited
+function isWordEdited(word) {
+    if (!window.wordPhonemeOrder || !window.wordPhonemeOrder[word] || !phonemeDurations[word]) {
+        return false;
+    }
+    
+    const orderedPhonemes = window.wordPhonemeOrder[word];
+    
+    // Check if any phoneme duration has changed
+    for (let i = 0; i < orderedPhonemes.length; i++) {
+        const [phoneme, originalDuration] = orderedPhonemes[i];
+        const currentDuration = phonemeDurations[word][i];
+        
+        if (!currentDuration || Math.abs(currentDuration - originalDuration) > 0.1) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+// Helper function to check if a phoneme has been edited
+function isPhonemeEdited(word, phonemeIndex) {
+    if (!window.wordPhonemeOrder || !window.wordPhonemeOrder[word] || !phonemeDurations[word]) {
+        return false;
+    }
+    
+    const orderedPhonemes = window.wordPhonemeOrder[word];
+    if (phonemeIndex >= orderedPhonemes.length) {
+        return false;
+    }
+    
+    const [phoneme, originalDuration] = orderedPhonemes[phonemeIndex];
+    const currentDuration = phonemeDurations[word][phonemeIndex];
+    
+    return currentDuration && Math.abs(currentDuration - originalDuration) > 0.1;
+}
+
 // Render the words in the word display
 function renderWords() {
     const words = textInput.value.split(' ');
     wordDisplay.innerHTML = '';
     
     words.forEach((word, index) => {
-        // Add insert silence button before each word (except the first)
-        if (index > 0) {
-            const insertBtn = document.createElement('button');
-            insertBtn.className = 'insert-silence';
-            insertBtn.innerHTML = '+';
-            insertBtn.title = 'Insert silence';
-            insertBtn.dataset.position = index;
-            wordDisplay.appendChild(insertBtn);
-        }
-        // Check if word duration has been modified from default
-        const isModified = wordDurations[word] && Math.abs(wordDurations[word] - 1.0) > 0.05;
+        // Check if word duration has been modified from original
+        const isModified = originalPhonemeDurations && isWordEdited(word);
         const isSelected = word === selectedWord;
         
         const wordBox = document.createElement('div');
-        const isSilence = word === '<break/>';
-        wordBox.className = `word-box ${isSelected ? 'selected' : ''} ${isSilence ? 'silence' : ''}`;
+        const isEdited = isWordEdited(word);
+        wordBox.className = `word-box ${isSelected ? 'selected' : ''} ${isEdited ? 'edited' : ''}`;
         wordBox.dataset.word = word;
         wordBox.innerHTML = `
             <div class="word-content">
-                <div>${isSilence ? 'silence' : word}</div>
+                <div>${word}</div>
                 ${isModified ? `<button class="reset-word" title="Reset to default duration">↺</button>` : ''}
             </div>
             <div class="waveform">
@@ -273,97 +304,153 @@ function renderWords() {
             <div class="handle handle-right" data-handle="right" title="Drag to adjust duration"></div>
         `;
         
-        // Get base width for this word
-        const baseWidth = getBaseWidthForWord(word);
-        
-        // Set width based on duration
-        if (wordDurations[word]) {
-            wordBox.style.width = `${baseWidth * wordDurations[word]}px`;
+        // Calculate width based on actual duration
+        let pixelWidth;
+        if (wordDurations[word] && window.durationScaling) {
+            // Use actual duration with proper scaling
+            pixelWidth = Math.round(wordDurations[word] * window.durationScaling.pixelsPerFrame);
         } else {
-            // If no duration set yet, use default
-            wordBox.style.width = `${baseWidth}px`;
+            // Fallback to calculated width
+            pixelWidth = getBaseWidthForWord(word);
         }
         
-        // Store the base width as a data attribute for later use
-        wordBox.dataset.baseWidth = baseWidth;
+        wordBox.style.width = `${pixelWidth}px`;
+        
+        // Store the current width as a data attribute for later use
+        wordBox.dataset.currentWidth = pixelWidth;
         
         wordDisplay.appendChild(wordBox);
+        
+        // If this word has an associated SIL token, show it
+        if (window.silenceData && window.silenceData[word]) {
+            const silBox = document.createElement('div');
+            silBox.className = 'sil-box';
+            silBox.dataset.word = word; // Link to its parent word
+            silBox.innerHTML = `
+                <div class="sil-content">
+                    <div>SIL</div>
+                </div>
+            `;
+            
+            // Calculate width based on SIL duration
+            const silPixelWidth = Math.round(window.silenceData[word] * window.durationScaling.pixelsPerFrame);
+            silBox.style.width = `${silPixelWidth}px`;
+            
+            wordDisplay.appendChild(silBox);
+        }
+        
+        // Add insert silence button after each word (including the last)
+        const insertBtn = document.createElement('button');
+        insertBtn.className = 'insert-silence';
+        insertBtn.innerHTML = '+';
+        insertBtn.title = 'Insert silence after this word';
+        insertBtn.dataset.position = index + 1; // Insert after current word
+        wordDisplay.appendChild(insertBtn);
     });
 }
 
 // Update phonemes display for the selected word
 function updatePhonemes(word) {
-    selectedWordElem.textContent = `"${word === '<break/>' ? 'silence' : word}"`;
-    
-    // For silence blocks, don't show phonemes
-    if (word === '<break/>') {
-        phonemesContainer.innerHTML = '<div style="text-align: center; color: #666; font-style: italic;">Silence has no phonemes</div>';
-        return;
-    }
-    
-    // Generate phoneme data if it doesn't exist
-    const wordPhonemes = generatePhonemeData(word);
+    selectedWordElem.textContent = `"${word}"`;
     
     phonemesContainer.innerHTML = '';
     
-    wordPhonemes.forEach((phoneme, index) => {
-        const phonemeBox = document.createElement('div');
-        phonemeBox.className = 'phoneme-box';
-        phonemeBox.dataset.phoneme = phoneme;
-        phonemeBox.dataset.index = index;
+    // Use ordered phoneme list if available
+    if (window.wordPhonemeOrder && window.wordPhonemeOrder[word]) {
+        const orderedPhonemes = window.wordPhonemeOrder[word];
         
-        // Check if this phoneme has been modified from default
-        const isModified = phonemeDurations[word] && 
-                          phonemeDurations[word][phoneme] && 
-                          Math.abs(phonemeDurations[word][phoneme] - 1.0) > 0.05;
+        orderedPhonemes.forEach(([phoneme, originalDuration], index) => {
+            const phonemeBox = document.createElement('div');
+            const currentDuration = phonemeDurations[word] && phonemeDurations[word][index];
+            const isEdited = currentDuration && Math.abs(currentDuration - originalDuration) > 0.1;
+            phonemeBox.className = `phoneme-box ${isEdited ? 'edited' : ''}`;
+            phonemeBox.dataset.phoneme = phoneme;
+            phonemeBox.dataset.index = index;
         
-        phonemeBox.innerHTML = `
-            <div class="phoneme-content">
-                <div class="phoneme-text">${phoneme}</div>
-                ${isModified ? `<button class="reset-phoneme" title="Reset to default duration">↺</button>` : ''}
-            </div>
-            <div class="handle handle-left" data-handle="left" title="Drag to adjust duration"></div>
-            <div class="handle handle-right" data-handle="right" title="Drag to adjust duration"></div>
-        `;
-        
-        // Set width based on phoneme duration
-        if (phonemeDurations[word] && phonemeDurations[word][phoneme]) {
-            const baseWidth = 40; // Base width in pixels
-            phonemeBox.style.width = `${baseWidth * phonemeDurations[word][phoneme]}px`;
-        }
-        
-        phonemesContainer.appendChild(phonemeBox);
-    });
+            // Check if this phoneme has been modified from original
+            const isModified = isEdited;
+            
+            phonemeBox.innerHTML = `
+                <div class="phoneme-content">
+                    <div class="phoneme-text">${phoneme}</div>
+                    ${isModified ? `<button class="reset-phoneme" title="Reset to default duration">↺</button>` : ''}
+                </div>
+                <div class="handle handle-left" data-handle="left" title="Drag to adjust duration"></div>
+                <div class="handle handle-right" data-handle="right" title="Drag to adjust duration"></div>
+            `;
+            
+            // Set width based on phoneme duration
+            if (currentDuration && window.durationScaling) {
+                // Use actual duration with proper scaling
+                const pixelWidth = Math.round(currentDuration * window.durationScaling.pixelsPerFrame);
+                phonemeBox.style.width = `${pixelWidth}px`;
+            } else {
+                phonemeBox.style.width = '40px';
+            }
+            
+            phonemesContainer.appendChild(phonemeBox);
+        });
+    } else {
+        // Fallback to generate mock phonemes
+        const mockPhonemes = generatePhonemeData(word);
+        mockPhonemes.forEach((phoneme, index) => {
+            const phonemeBox = document.createElement('div');
+            phonemeBox.className = 'phoneme-box';
+            phonemeBox.dataset.phoneme = phoneme;
+            phonemeBox.dataset.index = index;
+            
+            phonemeBox.innerHTML = `
+                <div class="phoneme-content">
+                    <div class="phoneme-text">${phoneme}</div>
+                </div>
+                <div class="handle handle-left" data-handle="left" title="Drag to adjust duration"></div>
+                <div class="handle handle-right" data-handle="right" title="Drag to adjust duration"></div>
+            `;
+            
+            phonemeBox.style.width = '40px';
+            phonemesContainer.appendChild(phonemeBox);
+        });
+    }
 }
 
 // Helper function to update word duration based on phoneme durations
 function updateWordDurationFromPhonemes(word) {
     if (!phonemeDurations[word]) return;
     
-    const phonemes = Object.keys(phonemeDurations[word]);
-    if (phonemes.length === 0) return;
-    
-    // Calculate average of phoneme durations
-    const totalDuration = phonemes.reduce((sum, phoneme) => {
-        return sum + phonemeDurations[word][phoneme];
-    }, 0);
-    
-    const averageDuration = totalDuration / phonemes.length;
+    // Calculate sum of phoneme durations
+    let totalDuration = 0;
+    Object.values(phonemeDurations[word]).forEach(duration => {
+        totalDuration += duration;
+    });
     
     // Update word duration
-    wordDurations[word] = averageDuration;
+    wordDurations[word] = totalDuration;
     
     // Update word box width
     const wordBox = document.querySelector(`.word-box[data-word="${word}"]`);
     if (wordBox) {
-        const baseWidth = 80;
-        wordBox.style.width = `${baseWidth * wordDurations[word]}px`;
+        let pixelWidth;
+        if (window.durationScaling) {
+            pixelWidth = Math.round(totalDuration * window.durationScaling.pixelsPerFrame);
+        } else {
+            pixelWidth = Math.max(60, totalDuration * 2);
+        }
+        wordBox.style.width = `${pixelWidth}px`;
+        wordBox.dataset.currentWidth = pixelWidth;
+        
+        // Update edited class
+        if (isWordEdited(word)) {
+            wordBox.classList.add('edited');
+        } else {
+            wordBox.classList.remove('edited');
+        }
     }
     
     // Update slider value
     if (word === selectedWord) {
-        const sliderValue = (2 - wordDurations[word]) * 50;
-        speedSlider.value = sliderValue;
+        // Map duration to slider (inverse relationship, adjusted for new scale)
+        const sliderValue = Math.max(0, Math.min(100, 50 - (totalDuration - 50) * 0.5));
+        // speedSlider.value = sliderValue; // Removed
     }
 }
 
@@ -372,6 +459,25 @@ function addEventListeners() {
     // Mode toggle
     simpleMode.addEventListener('click', () => switchMode('simple'));
     advancedMode.addEventListener('click', () => switchMode('advanced'));
+    
+    // Prosody sliders
+    pitchSlider.addEventListener('input', (e) => {
+        pitchValue.textContent = e.target.value;
+        prosodyValues.pitch = parseInt(e.target.value);
+        localStorage.setItem('prosody_pitch', e.target.value);
+    });
+    
+    paceSlider.addEventListener('input', (e) => {
+        paceValue.textContent = e.target.value;
+        prosodyValues.pace = parseInt(e.target.value);
+        localStorage.setItem('prosody_pace', e.target.value);
+    });
+    
+    expressionSlider.addEventListener('input', (e) => {
+        expressionValue.textContent = e.target.value;
+        prosodyValues.expression = parseInt(e.target.value);
+        localStorage.setItem('prosody_expression', e.target.value);
+    });
     
     // Toggle phonemes visibility
     togglePhonemesBtn.addEventListener('click', () => {
@@ -392,18 +498,9 @@ function addEventListeners() {
     
     // Word selection and silence insertion
     wordDisplay.addEventListener('click', e => {
-        // Handle silence insertion
+        // Handle silence insertion - currently disabled
         if (e.target.classList.contains('insert-silence')) {
-            const position = parseInt(e.target.dataset.position);
-            const words = textInput.value.split(' ');
-            words.splice(position, 0, '<break/>');
-            textInput.value = words.join(' ');
-            
-            // Initialize duration for the new silence block
-            wordDurations['<break/>'] = 1.0;
-            
-            renderWords();
-            triggerDurationChange();
+            // Silence insertion is handled via SIL tokens now
             return;
         }
         
@@ -438,7 +535,7 @@ function addEventListeners() {
             // Update speed slider to match the selected word's duration
             if (wordDurations[selectedWord]) {
                 const sliderValue = (2 - wordDurations[selectedWord]) * 50;
-                speedSlider.value = sliderValue;
+                // speedSlider.value = sliderValue; // Removed
             }
         }
     });
@@ -447,7 +544,7 @@ function addEventListeners() {
     document.addEventListener('mousedown', e => {
         if (e.target.classList.contains('handle')) {
             isDragging = true;
-            dragTarget = e.target.closest('.word-box') || e.target.closest('.phoneme-box');
+            dragTarget = e.target.closest('.word-box') || e.target.closest('.phoneme-box') || e.target.closest('.sil-box');
             dragStartX = e.clientX;
             originalWidth = dragTarget.offsetWidth;
             
@@ -456,37 +553,64 @@ function addEventListeners() {
             dragTarget.dataset.dragHandle = handleType;
             
             document.body.style.cursor = 'ew-resize';
+            document.body.classList.add('dragging');
             e.preventDefault();
         }
     });
     
-    document.addEventListener('mousemove', e => {
+    window.addEventListener('mousemove', e => {
         if (!isDragging || !dragTarget) return;
         
+        e.preventDefault();
         const deltaX = e.clientX - dragStartX;
         const handleType = dragTarget.dataset.dragHandle;
         
         if (handleType === 'right') {
-            const newWidth = Math.max(40, originalWidth + deltaX);
+            const newWidth = Math.max(40, Math.min(800, originalWidth + deltaX)); // Increased max to 800px
             dragTarget.style.width = `${newWidth}px`;
         } else if (handleType === 'left') {
-            const newWidth = Math.max(40, originalWidth - deltaX);
+            const newWidth = Math.max(40, Math.min(800, originalWidth - deltaX)); // Increased max to 800px
             dragTarget.style.width = `${newWidth}px`;
         }
     });
     
-    document.addEventListener('mouseup', () => {
-        if (isDragging && dragTarget) {
+    window.addEventListener('mouseup', (e) => {
+        if (!isDragging) return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        if (dragTarget) {
             // Update durations based on the new width
             if (dragTarget.classList.contains('word-box')) {
                 const word = dragTarget.dataset.word;
-                // Get the stored base width for this word
-                const baseWidth = parseInt(dragTarget.dataset.baseWidth) || 80;
-                const newDuration = dragTarget.offsetWidth / baseWidth;
-                wordDurations[word] = newDuration;
+                // Convert pixel width back to duration using scaling factor
+                if (window.durationScaling) {
+                    const newDuration = dragTarget.offsetWidth / window.durationScaling.pixelsPerFrame;
+                    wordDurations[word] = newDuration;
+                } else {
+                    // Fallback
+                    const newDuration = dragTarget.offsetWidth / 2;
+                    wordDurations[word] = newDuration;
+                }
+                
+                // Update all phoneme durations proportionally
+                if (phonemeDurations[word] && window.wordPhonemeOrder && window.wordPhonemeOrder[word]) {
+                    const orderedPhonemes = window.wordPhonemeOrder[word];
+                    let originalTotal = 0;
+                    orderedPhonemes.forEach(([phoneme, duration]) => {
+                        originalTotal += duration;
+                    });
+                    
+                    const scale = wordDurations[word] / originalTotal;
+                    
+                    orderedPhonemes.forEach(([phoneme, origDuration], index) => {
+                        phonemeDurations[word][index] = origDuration * scale;
+                    });
+                }
                 
                 // Check if we need to add a reset button if not already present
-                const isChanged = Math.abs(newDuration - 1.0) > 0.05;
+                const isChanged = isWordEdited(word);
                 const resetButton = dragTarget.querySelector('.reset-word');
                 
                 if (isChanged && !resetButton) {
@@ -505,25 +629,30 @@ function addEventListeners() {
                 // Update slider if this is the selected word
                 if (word === selectedWord) {
                     const sliderValue = (2 - wordDurations[word]) * 50;
-                    speedSlider.value = sliderValue;
+                    // speedSlider.value = sliderValue; // Removed
                 }
                 
                 // Trigger duration change callback
                 triggerDurationChange();
             } else if (dragTarget.classList.contains('phoneme-box')) {
-                const phoneme = dragTarget.dataset.phoneme;
-                const baseWidth = 40; // Base width in pixels
+                const phonemeIndex = parseInt(dragTarget.dataset.index);
                 
                 if (!phonemeDurations[selectedWord]) {
                     phonemeDurations[selectedWord] = {};
                 }
                 
-                const oldDuration = phonemeDurations[selectedWord][phoneme] || 1.0;
-                const newDuration = dragTarget.offsetWidth / baseWidth;
-                phonemeDurations[selectedWord][phoneme] = newDuration;
+                // Convert pixel width back to duration using scaling factor
+                let newDuration;
+                if (window.durationScaling) {
+                    newDuration = dragTarget.offsetWidth / window.durationScaling.pixelsPerFrame;
+                } else {
+                    // Fallback
+                    newDuration = dragTarget.offsetWidth / 2;
+                }
+                phonemeDurations[selectedWord][phonemeIndex] = newDuration;
                 
                 // Check if we need to add a reset button if not already present
-                const isChanged = Math.abs(newDuration - 1.0) > 0.05;
+                const isChanged = isPhonemeEdited(selectedWord, phonemeIndex);
                 const resetButton = dragTarget.querySelector('.reset-phoneme');
                 
                 if (isChanged && !resetButton) {
@@ -542,6 +671,39 @@ function addEventListeners() {
                 // Update overall word duration
                 updateWordDurationFromPhonemes(selectedWord);
                 
+                // Update edited class
+                if (isPhonemeEdited(selectedWord, phonemeIndex)) {
+                    dragTarget.classList.add('edited');
+                } else {
+                    dragTarget.classList.remove('edited');
+                }
+                
+                // Trigger duration change callback
+                triggerDurationChange();
+            } else if (dragTarget.classList.contains('sil-box')) {
+                const word = dragTarget.dataset.word;
+                
+                // Convert pixel width back to duration using scaling factor
+                let newDuration;
+                if (window.durationScaling) {
+                    newDuration = dragTarget.offsetWidth / window.durationScaling.pixelsPerFrame;
+                } else {
+                    // Fallback
+                    newDuration = dragTarget.offsetWidth / 2;
+                }
+                
+                // Update SIL duration
+                if (!window.silenceData) {
+                    window.silenceData = {};
+                }
+                window.silenceData[word] = newDuration;
+                
+                // Mark the word as edited since its SIL duration changed
+                const wordBox = document.querySelector(`.word-box[data-word="${word}"]`);
+                if (wordBox) {
+                    wordBox.classList.add('edited');
+                }
+                
                 // Trigger duration change callback
                 triggerDurationChange();
             }
@@ -550,7 +712,33 @@ function addEventListeners() {
         // Reset drag state
         isDragging = false;
         dragTarget = null;
+        dragStartX = 0;
+        originalWidth = 0;
         document.body.style.cursor = '';
+        document.body.classList.remove('dragging');
+        
+        // Clean up any drag handle data
+        document.querySelectorAll('[data-drag-handle]').forEach(el => {
+            delete el.dataset.dragHandle;
+        });
+    });
+    
+    // Handle mouse leaving the window
+    window.addEventListener('mouseleave', (e) => {
+        if (isDragging) {
+            // Reset drag state
+            isDragging = false;
+            dragTarget = null;
+            dragStartX = 0;
+            originalWidth = 0;
+            document.body.style.cursor = '';
+            document.body.classList.remove('dragging');
+            
+            // Clean up any drag handle data
+            document.querySelectorAll('[data-drag-handle]').forEach(el => {
+                delete el.dataset.dragHandle;
+            });
+        }
     });
     
     // Global event delegation for reset buttons (phonemes and words)
@@ -562,19 +750,32 @@ function addEventListeners() {
             const resetButton = e.target.classList.contains('reset-phoneme') ? 
                 e.target : e.target.closest('.reset-phoneme');
             const phonemeBox = resetButton.closest('.phoneme-box');
-            const phoneme = phonemeBox.dataset.phoneme;
+            const phonemeIndex = parseInt(phonemeBox.dataset.index);
             
-            console.log('Reset clicked for phoneme:', phoneme);
+            console.log('Reset clicked for phoneme index:', phonemeIndex);
             
-            // Reset the phoneme duration to default
-            phonemeDurations[selectedWord][phoneme] = 1.0;
-            
-            // Update the UI
-            const baseWidth = 40;
-            phonemeBox.style.width = `${baseWidth}px`;
+            // Reset the phoneme duration to original
+            if (window.wordPhonemeOrder && window.wordPhonemeOrder[selectedWord]) {
+                const orderedPhonemes = window.wordPhonemeOrder[selectedWord];
+                if (phonemeIndex < orderedPhonemes.length) {
+                    const [phoneme, origDuration] = orderedPhonemes[phonemeIndex];
+                    phonemeDurations[selectedWord][phonemeIndex] = origDuration;
+                    
+                    // Update the UI with proper scaling
+                    if (window.durationScaling) {
+                        const pixelWidth = Math.round(origDuration * window.durationScaling.pixelsPerFrame);
+                        phonemeBox.style.width = `${pixelWidth}px`;
+                    } else {
+                        phonemeBox.style.width = `${origDuration}px`;
+                    }
+                }
+            }
             
             // Remove the reset button
             resetButton.remove();
+            
+            // Remove edited class
+            phonemeBox.classList.remove('edited');
             
             // Update the word width based on average of phoneme durations
             updateWordDurationFromPhonemes(selectedWord);
@@ -594,42 +795,51 @@ function addEventListeners() {
             
             console.log('Reset clicked for word:', word);
             
-            // Reset the word duration to default
-            wordDurations[word] = 1.0;
-            
-            // If in advanced mode, also reset all phonemes for this word
-            if (currentMode === 'advanced' && phonemeDurations[word]) {
-                Object.keys(phonemeDurations[word]).forEach(phoneme => {
-                    phonemeDurations[word][phoneme] = 1.0;
+            // Reset the word duration to original
+            if (window.wordPhonemeOrder && window.wordPhonemeOrder[word]) {
+                const orderedPhonemes = window.wordPhonemeOrder[word];
+                
+                // Reset all phoneme durations for this word
+                let totalDuration = 0;
+                orderedPhonemes.forEach(([phoneme, duration], index) => {
+                    phonemeDurations[word][index] = duration;
+                    totalDuration += duration;
                 });
+                
+                // Update word duration
+                wordDurations[word] = totalDuration;
+                
+                // Update the UI with proper scaling
+                if (window.durationScaling) {
+                    const pixelWidth = Math.round(totalDuration * window.durationScaling.pixelsPerFrame);
+                    wordBox.style.width = `${pixelWidth}px`;
+                } else {
+                    wordBox.style.width = `${totalDuration}px`;
+                }
                 
                 // If this is the selected word, update the phoneme display
                 if (word === selectedWord) {
                     updatePhonemes(word);
+                    
+                    // Update the slider
+                    const sliderValue = Math.max(0, Math.min(100, 50 - (totalDuration - 50) * 0.5));
+                    // speedSlider.value = sliderValue; // Removed
                 }
-            }
-            
-            // Get the stored base width for this word
-            const baseWidth = parseInt(wordBox.dataset.baseWidth) || 80;
-            
-            // Update the UI
-            wordBox.style.width = `${baseWidth}px`;
-            
-            // Update the slider if this is the selected word
-            if (word === selectedWord) {
-                speedSlider.value = 50; // 50 is the middle/default
             }
             
             // Remove the reset button
             resetButton.remove();
+            
+            // Remove edited class
+            wordBox.classList.remove('edited');
             
             // Trigger duration change callback
             triggerDurationChange();
         }
     });
     
-    // Speed slider
-    speedSlider.addEventListener('input', e => {
+    // Speed slider - Removed
+    /*speedSlider.addEventListener('input', e => {
         const speed = e.target.value / 50; // 0-2 range (1 is default)
         
         if (currentMode === 'simple') {
@@ -665,19 +875,26 @@ function addEventListeners() {
             }
         } else {
             // In advanced mode, adjust all phonemes proportionally
-            if (phonemeDurations[selectedWord]) {
-                Object.keys(phonemeDurations[selectedWord]).forEach(phoneme => {
-                    phonemeDurations[selectedWord][phoneme] = 2 - speed;
+            if (phonemeDurations[selectedWord] && window.wordPhonemeOrder && window.wordPhonemeOrder[selectedWord]) {
+                const orderedPhonemes = window.wordPhonemeOrder[selectedWord];
+                const scale = (2 - speed) / wordDurations[selectedWord];
+                
+                // Update all phoneme durations proportionally
+                orderedPhonemes.forEach(([phoneme, origDuration], index) => {
+                    phonemeDurations[selectedWord][index] = phonemeDurations[selectedWord][index] * scale;
                 });
                 
                 // Update phoneme box widths
                 document.querySelectorAll('.phoneme-box').forEach(box => {
-                    const phoneme = box.dataset.phoneme;
-                    box.style.width = `${40 * phonemeDurations[selectedWord][phoneme]}px`;
+                    const phonemeIndex = parseInt(box.dataset.index);
+                    if (window.durationScaling) {
+                        const pixelWidth = Math.round(phonemeDurations[selectedWord][phonemeIndex] * window.durationScaling.pixelsPerFrame);
+                        box.style.width = `${pixelWidth}px`;
+                    }
                 });
                 
-                // Update word duration and width
-                wordDurations[selectedWord] = 2 - speed;
+                // Update word duration
+                updateWordDurationFromPhonemes(selectedWord);
                 
                 const wordBox = document.querySelector(`.word-box[data-word="${selectedWord}"]`);
                 if (wordBox) {
@@ -690,7 +907,7 @@ function addEventListeners() {
                 triggerDurationChange();
             }
         }
-    });
+    });*/
     
     // Text input change
     textInput.addEventListener('input', () => {
@@ -722,7 +939,7 @@ function addEventListeners() {
             // Update slider value based on the new selected word
             if (wordDurations[selectedWord]) {
                 const sliderValue = (2 - wordDurations[selectedWord]) * 50;
-                speedSlider.value = sliderValue;
+                // speedSlider.value = sliderValue; // Removed
             }
         }
     });
@@ -774,7 +991,7 @@ async function createVoiceWithUI() {
         // Store the voice ID if valid
         if (voiceId && voiceId !== 'undefined') {
             daisysAPI.voiceId = voiceId;
-            localStorage.setItem('daisys_voice_id', voiceId);
+            sessionStorage.setItem('daisys_voice_id', voiceId);
             console.log('Voice created/retrieved:', voiceId);
         } else {
             console.error('Invalid voice ID returned:', voiceId);
@@ -862,10 +1079,6 @@ function addAuthEventListeners() {
 
 // Update authentication UI
 function updateAuthUI() {
-    console.log('Updating auth UI, logged in:', daisysAPI.isLoggedIn());
-    console.log('Access token:', daisysAPI.accessToken);
-    console.log('Username:', daisysAPI.username);
-    
     if (daisysAPI.isLoggedIn()) {
         loginBtn.style.display = 'none';
         userInfo.style.display = 'flex';
@@ -879,27 +1092,35 @@ function updateAuthUI() {
 // State management
 let hasGeneratedPreview = false;
 let currentAudio = null;
+let currentAudioUrl = null;
 let previewHistory = [];
 let currentSessionId = Date.now().toString();
+
+// Store original take data
+let originalTakeId = null;
+let originalPhonemeDurations = null;
+let originalText = null;
+
+// Prosody values - load from localStorage or use defaults
+let prosodyValues = {
+    pitch: parseInt(localStorage.getItem('prosody_pitch') || '0'),
+    pace: parseInt(localStorage.getItem('prosody_pace') || '0'),
+    expression: parseInt(localStorage.getItem('prosody_expression') || '0')
+};
 
 // Update UI state based on login and preview status
 function updateUIState() {
     const isLoggedIn = daisysAPI.isLoggedIn();
     const isCreatingVoice = daisysAPI.isCreatingVoice;
     const hasVoice = !!daisysAPI.voiceId;
-    console.log('Updating UI state, logged in:', isLoggedIn, 'has voice:', hasVoice, 'creating voice:', isCreatingVoice, 'has preview:', hasGeneratedPreview);
     
     // Show/hide preview button based on login status
     const previewSection = document.querySelector('.preview-section');
     if (previewSection) {
-        console.log('Preview section found, setting display to:', isLoggedIn ? 'block' : 'none');
         previewSection.style.display = isLoggedIn ? 'block' : 'none';
-    } else {
-        console.error('Preview section not found!');
     }
     
     if (playBtn) {
-        console.log('Play button found, setting display to:', isLoggedIn ? 'flex' : 'none');
         playBtn.style.display = isLoggedIn ? 'flex' : 'none';
         
         // Disable button if voice is being created or not ready
@@ -923,11 +1144,9 @@ function updateUIState() {
                 <svg viewBox="0 0 24 24" width="24" height="24">
                     <path d="M8 5v14l11-7z"></path>
                 </svg>
-                <span>Preview timing</span>
+                <span>${hasGeneratedPreview ? 'Regenerate' : 'Preview timing'}</span>
             `;
         }
-    } else {
-        console.error('Play button not found!');
     }
     
     // Show/hide word display based on preview status
@@ -985,14 +1204,40 @@ async function handlePlayClick() {
             console.log('No voice ID found, creating one...');
             const voiceId = await daisysAPI.getOrCreateVoice();
             daisysAPI.voiceId = voiceId;
-            localStorage.setItem('daisys_voice_id', voiceId);
+            sessionStorage.setItem('daisys_voice_id', voiceId);
         }
         
-        // Get phoneme durations
-        const durations = getAllPhonemeDurations();
+        // Get current prosody values
+        const currentProsody = {
+            pitch: parseInt(pitchSlider.value),
+            pace: parseInt(paceSlider.value),
+            expression: parseInt(expressionSlider.value)
+        };
+        
+        // Prepare durations data in the format expected by the API
+        const editedDurations = {};
+        
+        // Pass all phoneme durations, not just edited ones
+        const words = textInput.value.split(' ');
+        words.forEach(word => {
+            if (phonemeDurations[word]) {
+                editedDurations[word] = {};
+                Object.entries(phonemeDurations[word]).forEach(([phoneme, duration]) => {
+                    // Duration is already in frames
+                    editedDurations[word][phoneme] = duration;
+                });
+            }
+        });
+        
         
         // Generate TTS with the stored voice ID
-        const result = await daisysAPI.generateTTS(textInput.value, daisysAPI.voiceId, durations);
+        const result = await daisysAPI.generateTTS(
+            textInput.value, 
+            daisysAPI.voiceId, 
+            originalTakeId ? editedDurations : null,
+            originalTakeId,
+            currentProsody
+        );
         
         // Create audio element with authentication
         if (currentAudio) {
@@ -1045,15 +1290,20 @@ async function handlePlayClick() {
             const audioBlob = await finalResponse.blob();
             const audioObjectUrl = URL.createObjectURL(audioBlob);
             
+            // Clean up previous audio URL if exists
+            if (currentAudioUrl && currentAudioUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(currentAudioUrl);
+            }
+            
+            currentAudioUrl = audioObjectUrl;
             currentAudio = new Audio(audioObjectUrl);
             
             // Play the audio
             await currentAudio.play();
             
-            // Clean up the object URL when done
-            currentAudio.addEventListener('ended', () => {
-                URL.revokeObjectURL(audioObjectUrl);
-            });
+            // Show play-again and start-again buttons
+            playAgainBtn.style.display = 'flex';
+            startAgainBtn.style.display = 'flex';
         } catch (audioError) {
             console.error('Failed to fetch/play audio:', audioError);
             throw audioError;
@@ -1062,20 +1312,43 @@ async function handlePlayClick() {
         // Update UI state
         if (!hasGeneratedPreview) {
             hasGeneratedPreview = true;
-            updateUIState();
             
-            // Initialize word timings (mock data for now)
-            initializeWordTimings();
+            // Store original take data
+            originalTakeId = result.takeId;
+            originalText = textInput.value;
+            originalPhonemeDurations = result.phonemeDurations;
+            
+            // Store in API instance for later use
+            daisysAPI.originalPhonemeDurations = originalPhonemeDurations;
+            
+            // Initialize word timings from API response
+            initializeWordTimingsFromAPI(result.phonemeDurations);
+            
+            // Grey out pace slider for future regenerations
+            paceSlider.disabled = true;
+            
+            updateUIState();
             renderWords();
         }
         
-        // Add to history
+        // Add to history with complete state
         addToHistory({
             id: Date.now().toString(),
             sessionId: currentSessionId,
             text: textInput.value,
             audioUrl: result.audioUrl,
-            durations: durations,
+            durations: getAllPhonemeDurations(),
+            // Store complete state for restoration
+            fullState: {
+                wordDurations: JSON.parse(JSON.stringify(wordDurations)),
+                phonemeDurations: JSON.parse(JSON.stringify(phonemeDurations)),
+                wordPhonemeOrder: JSON.parse(JSON.stringify(window.wordPhonemeOrder || {})),
+                silenceData: JSON.parse(JSON.stringify(window.silenceData || {})),
+                originalTakeId: originalTakeId,
+                originalPhonemeDurations: originalPhonemeDurations,
+                originalText: originalText,
+                durationScaling: window.durationScaling
+            },
             timestamp: new Date().toISOString()
         });
         
@@ -1088,26 +1361,106 @@ async function handlePlayClick() {
             <svg viewBox="0 0 24 24" width="24" height="24">
                 <path d="M8 5v14l11-7z"></path>
             </svg>
-            <span>Preview timing</span>
+            <span>${hasGeneratedPreview ? 'Regenerate' : 'Preview timing'}</span>
         `;
     }
 }
 
-// Initialize word timings from TTS response (mock for now)
-function initializeWordTimings() {
+// Initialize word timings from API response
+function initializeWordTimingsFromAPI(apiPhonemeDurations) {
+    if (!apiPhonemeDurations || !apiPhonemeDurations[0]) {
+        console.error('No phoneme durations from API');
+        return;
+    }
+    
     const words = textInput.value.split(' ');
-    words.forEach(word => {
-        if (!wordDurations[word]) {
-            // Generate random timings for demo
-            wordDurations[word] = 0.8 + Math.random() * 0.4;
+    let wordIndex = 0;
+    
+    // Clear existing durations
+    wordDurations = {};
+    phonemeDurations = {};
+    
+    // Track SIL tokens separately
+    window.silenceData = {};
+    
+    // Store the actual phoneme arrays from API
+    window.apiPhonemeData = {};
+    
+    // First pass: collect all durations to find the minimum
+    let minPhonemeDuration = Infinity;
+    let allPhonemeDurations = [];
+    
+    // Process each sentence (for now we assume one sentence)
+    const sentenceDurations = apiPhonemeDurations[0];
+    
+    sentenceDurations.forEach((wordPhonemes) => {
+        wordPhonemes.forEach(([phoneme, duration]) => {
+            // Skip SIL for minimum calculation
+            if (phoneme !== 'SIL') {
+                allPhonemeDurations.push(duration);
+                if (duration > 0 && duration < minPhonemeDuration) {
+                    minPhonemeDuration = duration;
+                }
+            }
+        });
+    });
+    
+    // Calculate scale factor: minimum phoneme gets 30px width
+    const minPixelWidth = 30;
+    const pixelsPerFrame = minPixelWidth / minPhonemeDuration;
+    
+    
+    // Second pass: assign durations with proper scaling
+    wordIndex = 0;
+    sentenceDurations.forEach((wordPhonemes, index) => {
+        if (wordIndex < words.length) {
+            const word = words[wordIndex];
             
-            const phonemes = generatePhonemeData(word);
-            phonemeDurations[word] = {};
-            phonemes.forEach(phoneme => {
-                phonemeDurations[word][phoneme] = 0.8 + Math.random() * 0.4;
+            // Check if this word has a SIL phoneme
+            let silDuration = 0;
+            const nonSilPhonemes = wordPhonemes.filter(([phoneme, duration]) => {
+                if (phoneme === 'SIL') {
+                    silDuration += duration;
+                    return false;
+                }
+                return true;
             });
+            
+            // If there's a SIL, store it separately
+            if (silDuration > 0) {
+                window.silenceData[word] = silDuration;
+            }
+            
+            // Calculate total word duration from non-SIL phonemes
+            let totalDuration = 0;
+            phonemeDurations[word] = {};
+            
+            // Store ordered phoneme list separately
+            if (!window.wordPhonemeOrder) {
+                window.wordPhonemeOrder = {};
+            }
+            window.wordPhonemeOrder[word] = nonSilPhonemes;
+            
+            // Store durations by index to handle duplicates
+            nonSilPhonemes.forEach(([phoneme, duration], idx) => {
+                // Use index as key to preserve duplicates
+                phonemeDurations[word][idx] = duration;
+                totalDuration += duration;
+            });
+            
+            // Store word duration as sum of phoneme durations (in frames)
+            wordDurations[word] = totalDuration;
+            
+            wordIndex++;
         }
     });
+    
+    // Store the scaling factor globally
+    window.durationScaling = {
+        minPhonemeDuration,
+        pixelsPerFrame
+    };
+    
 }
 
 // History management
@@ -1207,10 +1560,39 @@ function addHistoryEventListeners() {
     const historyWidget = document.getElementById('history-widget');
     const toggleHistory = document.getElementById('toggle-history');
     const historyHeader = document.querySelector('.history-header');
+    const clearHistoryBtn = document.getElementById('clear-history-btn');
+    const clearHistoryConfirm = document.getElementById('clear-history-confirm');
+    const confirmClearBtn = document.getElementById('confirm-clear');
+    const cancelClearBtn = document.getElementById('cancel-clear');
     
     // Toggle history widget collapse
-    historyHeader.addEventListener('click', () => {
+    toggleHistory.addEventListener('click', (e) => {
+        e.stopPropagation();
         historyWidget.classList.toggle('collapsed');
+    });
+    
+    // Clear history button
+    clearHistoryBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clearHistoryBtn.style.display = 'none';
+        clearHistoryConfirm.style.display = 'flex';
+    });
+    
+    // Confirm clear
+    confirmClearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        localStorage.removeItem('previewHistory');
+        previewHistory = [];
+        updateHistoryUI();
+        clearHistoryBtn.style.display = 'block';
+        clearHistoryConfirm.style.display = 'none';
+    });
+    
+    // Cancel clear
+    cancelClearBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clearHistoryBtn.style.display = 'block';
+        clearHistoryConfirm.style.display = 'none';
     });
     
     // Session toggle
@@ -1241,9 +1623,39 @@ function addHistoryEventListeners() {
             const history = JSON.parse(localStorage.getItem('previewHistory') || '[]');
             const item = history.find(h => h.id === id);
             
-            if (item && item.durations) {
-                // Restore the durations
-                restoreDurations(item.durations);
+            if (item) {
+                // Restore the complete state
+                if (item.fullState) {
+                    // Restore text first
+                    if (item.text !== textInput.value) {
+                        textInput.value = item.text;
+                    }
+                    
+                    // Restore all state
+                    wordDurations = JSON.parse(JSON.stringify(item.fullState.wordDurations || {}));
+                    phonemeDurations = JSON.parse(JSON.stringify(item.fullState.phonemeDurations || {}));
+                    window.wordPhonemeOrder = JSON.parse(JSON.stringify(item.fullState.wordPhonemeOrder || {}));
+                    window.silenceData = JSON.parse(JSON.stringify(item.fullState.silenceData || {}));
+                    window.durationScaling = item.fullState.durationScaling;
+                    
+                    // Restore original take data if we're in preview mode
+                    if (hasGeneratedPreview && item.fullState.originalTakeId) {
+                        originalTakeId = item.fullState.originalTakeId;
+                        originalPhonemeDurations = item.fullState.originalPhonemeDurations;
+                        originalText = item.fullState.originalText;
+                        daisysAPI.originalPhonemeDurations = originalPhonemeDurations;
+                    }
+                    
+                    // Update selected word if needed
+                    const words = textInput.value.split(' ');
+                    if (!words.includes(selectedWord) && words.length > 0) {
+                        selectedWord = words[0];
+                    }
+                } else if (item.durations) {
+                    // Legacy format
+                    restoreDurations(item);
+                }
+                
                 renderWords();
                 updatePhonemes(selectedWord);
                 triggerDurationChange();
@@ -1262,39 +1674,68 @@ function addHistoryEventListeners() {
 }
 
 // Restore durations from history
-function restoreDurations(durations) {
-    // Reset all durations
-    wordDurations = {};
-    phonemeDurations = {};
+function restoreDurations(historyItem) {
+    if (!historyItem.fullState) {
+        // Legacy format - just restore basic durations
+        const durations = historyItem.durations || historyItem;
+        // Reset all durations
+        wordDurations = {};
+        phonemeDurations = {};
+        
+        // Build a map of phoneme to word
+        const phonemeToWord = {};
+        const words = textInput.value.split(' ');
+    }
+    
+    words.forEach(word => {
+        const wordPhonemes = generatePhonemeData(word);
+        wordPhonemes.forEach(phoneme => {
+            if (!phonemeToWord[phoneme]) {
+                phonemeToWord[phoneme] = [];
+            }
+            phonemeToWord[phoneme].push(word);
+        });
+    });
+    
+    // Track which words we've processed
+    const processedWords = new Set();
     
     // Parse durations and rebuild word/phoneme durations
-    let currentWord = '';
-    const words = textInput.value.split(' ');
-    let wordIndex = 0;
-    
     durations.forEach(([phoneme, duration]) => {
-        if (phoneme === '<silence>') {
-            // Handle silence
-            wordDurations['<break/>'] = duration / 100;
-        } else {
-            // Find which word this phoneme belongs to
-            if (!currentWord || !phonemeDurations[currentWord]) {
-                currentWord = words[wordIndex++];
-                if (!phonemeDurations[currentWord]) {
-                    phonemeDurations[currentWord] = {};
+        // Find which word this phoneme belongs to
+        const possibleWords = phonemeToWord[phoneme];
+        if (possibleWords) {
+            // Find the first unprocessed word that has this phoneme
+            for (const word of possibleWords) {
+                const wordPhonemes = generatePhonemeData(word);
+                
+                // Check if this word is expected to have this phoneme at this point
+                if (wordPhonemes.includes(phoneme)) {
+                    if (!phonemeDurations[word]) {
+                        phonemeDurations[word] = {};
+                    }
+                    
+                    // Store duration in frames
+                    phonemeDurations[word][phoneme] = duration;
+                    
+                    // Mark word as processed if all its phonemes are set
+                    const allPhonemesSet = wordPhonemes.every(p => phonemeDurations[word][p]);
+                    if (allPhonemesSet) {
+                        processedWords.add(word);
+                    }
+                    break;
                 }
             }
-            
-            phonemeDurations[currentWord][phoneme] = duration / 100;
         }
     });
     
     // Calculate word durations from phoneme durations
     Object.keys(phonemeDurations).forEach(word => {
-        const phonemes = Object.values(phonemeDurations[word]);
-        if (phonemes.length > 0) {
-            wordDurations[word] = phonemes.reduce((a, b) => a + b, 0) / phonemes.length;
-        }
+        let totalDuration = 0;
+        Object.values(phonemeDurations[word]).forEach(duration => {
+            totalDuration += duration;
+        });
+        wordDurations[word] = totalDuration;
     });
 }
 
@@ -1340,6 +1781,14 @@ function init() {
         });
     });
     
+    // Initialize prosody sliders with saved values
+    pitchSlider.value = prosodyValues.pitch;
+    pitchValue.textContent = prosodyValues.pitch;
+    paceSlider.value = prosodyValues.pace;
+    paceValue.textContent = prosodyValues.pace;
+    expressionSlider.value = prosodyValues.expression;
+    expressionValue.textContent = prosodyValues.expression;
+    
     renderWords();
     updatePhonemes(selectedWord);
     addEventListeners();
@@ -1356,6 +1805,71 @@ function init() {
     playBtn.removeEventListener('click', playBtn.onclick);
     playBtn.addEventListener('click', handlePlayClick);
     
+    // Add play-again button handler
+    playAgainBtn.addEventListener('click', async () => {
+        if (currentAudioUrl) {
+            if (currentAudio) {
+                currentAudio.pause();
+            }
+            currentAudio = new Audio(currentAudioUrl);
+            await currentAudio.play();
+        }
+    });
+    
+    // Add start-again button handler
+    startAgainBtn.addEventListener('click', () => {
+        // Reset all state
+        hasGeneratedPreview = false;
+        originalTakeId = null;
+        originalPhonemeDurations = null;
+        originalText = null;
+        currentAudio = null;
+        currentAudioUrl = null;
+        
+        // Clear durations
+        wordDurations = {};
+        phonemeDurations = {};
+        window.wordPhonemeOrder = {};
+        window.silenceData = {};
+        window.durationScaling = null;
+        
+        // Reset UI
+        textInput.disabled = false;
+        textInput.style.opacity = '1';
+        textInput.style.cursor = 'text';
+        
+        // Enable pace slider
+        paceSlider.disabled = false;
+        
+        // Hide timing interface
+        wordDisplay.style.display = 'none';
+        const wordEditor = document.querySelector('.word-editor');
+        if (wordEditor) {
+            wordEditor.style.display = 'none';
+        }
+        
+        // Hide play again and start again buttons
+        playAgainBtn.style.display = 'none';
+        startAgainBtn.style.display = 'none';
+        
+        // Update UI state
+        updateUIState();
+        
+        // Re-initialize with current text
+        const words = textInput.value.split(' ');
+        words.forEach(word => {
+            wordDurations[word] = 1.0;
+            const wordPhonemes = generatePhonemeData(word);
+            phonemeDurations[word] = {};
+            wordPhonemes.forEach(phoneme => {
+                phonemeDurations[word][phoneme] = 1.0;
+            });
+        });
+        
+        renderWords();
+        updatePhonemes(selectedWord);
+    });
+    
     // Check if we're logged in but don't have a voice
     if (daisysAPI.isLoggedIn() && !daisysAPI.voiceId) {
         console.log('Logged in but no voice, creating one...');
@@ -1366,24 +1880,4 @@ function init() {
 // Initialize the app when the DOM is loaded
 document.addEventListener('DOMContentLoaded', init);
 
-// Debug function to manually update UI (can be called from console)
-window.debugUpdateUI = function() {
-    console.log('=== DEBUG UI UPDATE ===');
-    console.log('DaisysAPI instance:', daisysAPI);
-    console.log('Access token:', daisysAPI.accessToken);
-    console.log('Is logged in:', daisysAPI.isLoggedIn());
-    console.log('Preview section:', document.querySelector('.preview-section'));
-    console.log('Play button:', playBtn);
-    
-    // Check localStorage directly
-    console.log('=== LOCALSTORAGE CHECK ===');
-    console.log('Stored access token:', localStorage.getItem('daisys_access_token'));
-    console.log('Stored refresh token:', localStorage.getItem('daisys_refresh_token'));
-    console.log('Stored username:', localStorage.getItem('daisys_username'));
-    console.log('All localStorage keys:', Object.keys(localStorage));
-    
-    updateAuthUI();
-    updateUIState();
-    
-    console.log('=== END DEBUG ===');
-}; 
+ 

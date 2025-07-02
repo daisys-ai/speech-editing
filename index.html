@@ -3,13 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Word Duration</title>
+    <title>DAISYS speech editing demo</title>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Word Duration</h1>
+            <div class="title-container">
+                <div class="title-line title-small">DAISYS</div>
+                <div class="title-line title-large">speech editing</div>
+                <div class="title-line title-small">demo</div>
+            </div>
             <div class="header-controls">
                 <div class="auth-container" id="auth-container">
                     <button class="login-btn" id="login-btn">Login</button>
@@ -55,12 +59,43 @@
         </div>
 
         <div class="preview-section">
-            <button class="play-btn" id="play-btn">
-                <svg viewBox="0 0 24 24" width="24" height="24">
-                    <path d="M8 5v14l11-7z"></path>
-                </svg>
-                <span>Preview timing</span>
-            </button>
+            <div class="prosody-controls">
+                <div class="prosody-slider">
+                    <label for="pitch-slider">Pitch</label>
+                    <input type="range" id="pitch-slider" min="-10" max="10" value="0">
+                    <span id="pitch-value">0</span>
+                </div>
+                <div class="prosody-slider">
+                    <label for="pace-slider">Pace</label>
+                    <input type="range" id="pace-slider" min="-10" max="10" value="0">
+                    <span id="pace-value">0</span>
+                </div>
+                <div class="prosody-slider">
+                    <label for="expression-slider">Expression</label>
+                    <input type="range" id="expression-slider" min="-10" max="10" value="0">
+                    <span id="expression-value">0</span>
+                </div>
+            </div>
+            <div class="preview-buttons">
+                <button class="play-btn" id="play-btn">
+                    <svg viewBox="0 0 24 24" width="24" height="24">
+                        <path d="M8 5v14l11-7z"></path>
+                    </svg>
+                    <span>Preview timing</span>
+                </button>
+                <button class="play-again-btn" id="play-again-btn" style="display: none;">
+                    <svg viewBox="0 0 24 24" width="24" height="24">
+                        <path d="M8 5v14l11-7z"></path>
+                    </svg>
+                    <span>Play again</span>
+                </button>
+                <button class="start-again-btn" id="start-again-btn" style="display: none;">
+                    <svg viewBox="0 0 24 24" width="24" height="24">
+                        <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"></path>
+                    </svg>
+                    <span>Start again</span>
+                </button>
+            </div>
         </div>
 
         <div class="word-display" id="word-display">
@@ -85,11 +120,7 @@
                 </button>
             </div>
             
-            <div class="speed-slider">
-                <span>Faster</span>
-                <input type="range" id="speed-slider" min="0" max="100" value="30">
-                <span>Slower</span>
-            </div>
+            <!-- Speed slider removed -->
         </div>
 
         <div class="instruction">
@@ -101,11 +132,30 @@
         <div class="history-widget" id="history-widget">
             <div class="history-header">
                 <h3>History</h3>
-                <button class="toggle-history" id="toggle-history">
-                    <svg viewBox="0 0 24 24" width="16" height="16">
-                        <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"></path>
-                    </svg>
-                </button>
+                <div class="history-header-controls">
+                    <button class="clear-history-btn" id="clear-history-btn" title="Clear all history">
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                        </svg>
+                    </button>
+                    <div class="clear-history-confirm" id="clear-history-confirm" style="display: none;">
+                        <button class="confirm-clear" id="confirm-clear" title="Confirm clear">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                            </svg>
+                        </button>
+                        <button class="cancel-clear" id="cancel-clear" title="Cancel">
+                            <svg viewBox="0 0 24 24" width="16" height="16">
+                                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <button class="toggle-history" id="toggle-history">
+                        <svg viewBox="0 0 24 24" width="16" height="16">
+                            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"></path>
+                        </svg>
+                    </button>
+                </div>
             </div>
             <div class="history-content" id="history-content">
                 <div class="history-empty">No preview history yet</div>

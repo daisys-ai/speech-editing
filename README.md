@@ -109,11 +109,11 @@ Example: `http://localhost:8000/?mock=true`
 ### Initial Setup
 1. Click "Login" in the top right corner
 2. Enter your credentials (or any credentials in mock mode)
-3. The interface will show "Preview timing" button once logged in
+3. The interface will show "Generate" button once logged in
 
 ### Editing Workflow
 1. Enter or modify text in the input field
-2. Click "Preview timing" to generate initial speech
+2. Click "Generate" to generate initial speech
 3. The timing interface will appear with draggable word blocks
 4. Adjust timings by:
    - Dragging word edges (blue handles)

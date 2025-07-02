@@ -1144,7 +1144,7 @@ function updateUIState() {
                 <svg viewBox="0 0 24 24" width="24" height="24">
                     <path d="M8 5v14l11-7z"></path>
                 </svg>
-                <span>${hasGeneratedPreview ? 'Regenerate' : 'Preview timing'}</span>
+                <span>${hasGeneratedPreview ? 'Regenerate' : 'Generate'}</span>
             `;
         }
     }
@@ -1178,7 +1178,7 @@ function updateUIState() {
         } else if (!hasVoice) {
             instruction.innerHTML = '<p>Voice setup required. Please wait...</p>';
         } else if (!hasGeneratedPreview) {
-            instruction.innerHTML = '<p>Click "Preview timing" to generate speech and start editing</p>';
+            instruction.innerHTML = '<p>Click "Generate" to generate speech and start editing</p>';
         } else {
             instruction.innerHTML = `
                 <p><span class="highlight">Drag the blue handles</span> on word edges to adjust duration or use the slider for precise control</p>
@@ -1361,7 +1361,7 @@ async function handlePlayClick() {
             <svg viewBox="0 0 24 24" width="24" height="24">
                 <path d="M8 5v14l11-7z"></path>
             </svg>
-            <span>${hasGeneratedPreview ? 'Regenerate' : 'Preview timing'}</span>
+            <span>${hasGeneratedPreview ? 'Regenerate' : 'Generate'}</span>
         `;
     }
 }

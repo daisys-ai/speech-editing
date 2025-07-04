@@ -2,7 +2,7 @@
 class Config {
     constructor() {
         // Default values
-        this.DAISYS_API_URL = 'https://api.daisys.ai';
+        this.DAISYS_API_URL = 'https://api.daisys.ai/dev';
         this.DAISYS_AUTH_URL = 'https://api.daisys.ai';
         this.MOCK_MODE = false;
         this.MOCK_USERNAME = 'test@example.com';

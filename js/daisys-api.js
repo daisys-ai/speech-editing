@@ -163,7 +163,7 @@ class DaisysAPI {
         this.loadTokens();
     }
 
-    // Get or create a voice for infilling-en model
+    // Get or create a voice for infilling-en-v1 model
     async getOrCreateVoice() {
         try {
             this.isCreatingVoice = true;
@@ -195,10 +195,10 @@ class DaisysAPI {
             const voices = Array.isArray(voicesData) ? voicesData : (voicesData.voices || voicesData.data || []);
             console.log('Extracted voices array:', voices);
             
-            // Look for an infilling-en voice
-            const infillingVoice = voices.find(v => v.model === 'infilling-en');
+            // Look for an infilling-en-v1 voice
+            const infillingVoice = voices.find(v => v.model === 'infilling-en-v1');
             console.log('Found infilling voice:', infillingVoice);
-            
+
             if (infillingVoice) {
                 this.isCreatingVoice = false;
                 const voiceId = infillingVoice.id || infillingVoice.voice_id;
@@ -206,7 +206,7 @@ class DaisysAPI {
                 return voiceId;
             }
 
-            // Create a new voice for infilling-en
+            // Create a new voice
             const createResponse = await fetch(`${this.apiUrl}/v1/speak/voices/generate`, {
                 method: 'POST',
                 headers: {
@@ -216,7 +216,7 @@ class DaisysAPI {
                 body: JSON.stringify({
                     name: 'Default Infilling Voice',
                     gender: 'male',
-                    model: 'infilling-en'
+                    model: 'infilling-en-v1'
                 })
             });
 

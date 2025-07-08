@@ -1622,7 +1622,7 @@ function addHistoryEventListeners() {
     });
     
     // Session toggle
-    document.addEventListener('click', (e) => {
+    document.addEventListener('click', async (e) => {
         if (e.target.closest('.session-header')) {
             const session = e.target.closest('.history-session');
             session.classList.toggle('expanded');
@@ -1638,7 +1638,46 @@ function addHistoryEventListeners() {
                 if (currentAudio) {
                     currentAudio.pause();
                 }
-                currentAudio = new Audio(item.audioUrl);
+                let audioResponse = await fetch(item.audioUrl, {
+                  headers: {
+                    'Authorization': `Bearer ${daisysAPI.accessToken}`
+                  },
+                  redirect: 'manual'});
+
+                let finalResponse;
+
+                // Check if it's a redirect
+                if (audioResponse.type === 'opaqueredirect' || (audioResponse.status >= 300 && audioResponse.status < 400)) {
+                  // Get the redirect location
+                    const redirectUrl = audioResponse.headers.get('Location');
+
+                    if (redirectUrl) {
+                        console.log('Following redirect to:', redirectUrl);
+                        // Follow redirect WITHOUT auth header (for external URLs like S3/CDN)
+                        finalResponse = await fetch(redirectUrl);
+                    } else {
+                        // Fallback: if we can't get the location header, try with automatic redirect
+                        console.log('Redirect detected but no Location header, retrying with automatic redirect');
+                        finalResponse = await fetch(item.audioUrl, {
+                            headers: {
+                                'Authorization': `Bearer ${daisysAPI.accessToken}`
+                            }
+                        });
+                    }
+                } else if (audioResponse.ok) {
+                    // No redirect, use the original response
+                    finalResponse = audioResponse;
+                } else {
+                    throw new Error(`Failed to fetch audio: ${audioResponse.status}`);
+                }
+
+                if (!finalResponse.ok) {
+                    throw new Error(`Failed to fetch audio from final URL: ${finalResponse.status}`);
+                }
+
+                const audioBlob = await finalResponse.blob();
+                const audioObjectUrl = URL.createObjectURL(audioBlob);
+                currentAudio = new Audio(audioObjectUrl);
                 currentAudio.play();
             }
         }
